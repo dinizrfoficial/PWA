@@ -171,25 +171,38 @@ function showCloseGuidance(kind){
   wrapper.append(p,note,ok);area.append(wrapper);
  });
 }
-function showExitOptions(){
- modal('Fechar ou minimizar?',area=>{
-  const box=document.createElement('div');box.className='modal-stack';
-  const p=document.createElement('p');p.textContent='Você está na lista de canais. Deseja continuar ou ver como minimizar/fechar o aplicativo?';box.append(p);
-  for(const [label,fn,style] of [
-    ['CONTINUAR NO APP',closeModal,'primary'],
-    ['COMO MINIMIZAR',()=>showCloseGuidance('min'),'outline'],
-    ['COMO FECHAR',()=>showCloseGuidance('close'),'outline']
-  ]){const button=document.createElement('button');button.type='button';button.className=style;button.textContent=label;button.onclick=fn;box.append(button);}
-  area.append(box);
- });
+// Navegacao exclusiva da PWA instalada. Paginas Web/PWA nao tem uma API
+// padronizada para minimizar o proprio processo: manter sessao, RX/TX e
+// WebSocket intactos e orientar o gesto Início, sem simular encerramento.
+function requestMinimize(){
+ const platform=/iPad|iPhone|iPod/i.test(navigator.userAgent)?'iPhone':/Android/i.test(navigator.userAgent)?'Android':'PC';
+ if(platform==='Android')toast('Para minimizar sem sair da conta, use o botão Início do Android.');
+ else if(platform==='iPhone')toast('Para minimizar, volte à Tela de Início pelo gesto do iPhone.');
+ else toast('Para minimizar, use o controle da janela ou a área de trabalho.');
 }
-// Menu exclusivo da tela PTT. O menu administrativo dos canais continua
-// disponivel na lista e no avatar do canal.
-function pttScreenMenu(){
- menu('Opções do aplicativo',[
+function exitSubmenu(){
+ menu('Sair',[
+  {label:'Fechar completamente',danger:true,fn:confirmCloseApp},
   {label:'Minimizar',fn:()=>showCloseGuidance('min')},
-  {label:'Fechar completamente',danger:true,fn:()=>confirmCloseApp()}
+  {label:'Voltar',fn:pttScreenMenu}
  ]);
+}
+// O menu de operacao no canal e independente das opcoes do canal (avatar).
+function pttScreenMenu(){
+ menu('Menu',[
+  {label:'Sair',fn:exitSubmenu},
+  {label:'Desconectar',danger:true,fn:confirmDisconnect}
+ ]);
+}
+async function confirmDisconnect(){
+ const accepted=await confirmModal(
+  'Desconectar',
+  'Deseja desconectar sua conta neste dispositivo e voltar à tela de login? A sessão será encerrada e será necessário entrar novamente.',
+  'DESCONECTAR'
+ );
+ if(!accepted)return;
+ await logout();
+ registrationMessage('login-message','Conta desconectada. Entre novamente para continuar.');
 }
 async function confirmCloseApp(){
  const accepted=await confirmModal(
@@ -231,8 +244,8 @@ function goBack(){
   case 'verify':case 'contribution':
    confirmModal('Voltar ao login','Deseja sair desta etapa e voltar à tela de login?','VOLTAR AO LOGIN')
     .then(yes=>{if(yes)logout().catch(handleError);});break;
-  case 'channels':showExitOptions();break;
-  default:if(state.user)screen('channels');else showExitOptions();
+  case 'channels':requestMinimize();break;
+  default:if(state.user)screen('channels');else requestMinimize();
  }
 }
 let systemBackReady=false;
@@ -706,7 +719,7 @@ async function perform(task){try{await task();}catch(e){handleError(e)}}
 async function editChannel(c){const values=await promptModal('Editar canal',[{label:'Nome do canal',name:'name',value:c.name,maxLength:40,required:true},{label:'Descrição',name:'description',value:c.description,maxLength:200,type:'textarea'}]);if(!values)return;await perform(async()=>{await api('/api/channels/profile',{method:'POST',body:{channelId:c.id,...values}});await loadChannels();toast('Canal atualizado');});}
 async function deleteChannel(c){if(!await confirmModal('Excluir canal',`Excluir definitivamente o canal ${c.name}? Esta ação também afeta seus participantes.`, 'Excluir canal'))return;await perform(async()=>{await api('/api/channels/delete',{method:'POST',body:{channelId:c.id}});state.selected=null;await loadChannels();toast('Canal excluído');});}
 async function removeChannel(c){if(!await confirmModal('Remover canal',`Remover ${c.name} da sua lista?`,'Remover'))return;await perform(async()=>{await api('/api/channels/remove',{method:'POST',body:{channelId:c.id}});state.selected=null;await loadChannels();toast('Canal removido da lista');});}
-function profileMenu(){menu('Minha conta',[{label:'Trocar foto do perfil',fn:()=>chooseImage({type:'user'})},{label:'Alterar nome de usuário',fn:async()=>{const v=await promptModal('Alterar nome',[{label:'Novo nome',name:'username',value:state.profile?.username,maxLength:32,required:true}]);if(!v)return;await perform(async()=>{await api('/api/users/username',{method:'POST',body:v});state.profile.username=v.username;updateProfile();toast('Nome atualizado');});}},{label:'Minha Conta e Renovação',fn:openRenewal},{label:'Atualizar canais',fn:()=>perform(loadChannels)},{label:'Sair da conta',danger:true,fn:logout}]);}
+function profileMenu(){menu('Minha conta',[{label:'Trocar foto do perfil',fn:()=>chooseImage({type:'user'})},{label:'Alterar nome de usuário',fn:async()=>{const v=await promptModal('Alterar nome',[{label:'Novo nome',name:'username',value:state.profile?.username,maxLength:32,required:true}]);if(!v)return;await perform(async()=>{await api('/api/users/username',{method:'POST',body:v});state.profile.username=v.username;updateProfile();toast('Nome atualizado');});}},{label:'Minha Conta e Renovação',fn:openRenewal},{label:'Atualizar canais',fn:()=>perform(loadChannels)},{label:'Desconectar',danger:true,fn:confirmDisconnect}]);}
 async function logout(){
  stopConnection();state.sessionId='';state.sessionEnded=true;
  state.profile=null;state.channels=[];state.selected=null;state.users=[];
