@@ -28,3 +28,151 @@
 #meter-bars i{opacity:1!important;transition:background .08s linear}
 #meter-bars i:not(.on){background:#203143}
 .last-msg[aria-pressed="true"]{color:#fff;border-color:#f79f48;background:#493019}
+
+/* ==========================================================
+   v5.3 — tela responsiva com area util sem rolagem externa
+   ========================================================== */
+html,body{width:100%;max-width:100%}
+html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hidden}
+.shell{
+ height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;
+ overflow:hidden;padding-top:env(safe-area-inset-top,0px);
+}
+.topbar{flex:0 0 auto;min-height:0;max-width:100%;padding-block:clamp(7px,1.5dvh,12px)}
+#main{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.screen{flex:1 1 auto;min-width:0;min-height:0;max-width:100%;overflow-y:auto;overscroll-behavior-y:contain}
+.screen.active{display:block}
+.login-screen.active{display:grid;align-content:safe center;justify-items:center;overflow-y:auto}
+
+/* Lista de canais: avatar, titulo e botoes fixos; apenas os cards rolam. */
+#channels-screen.active,#users-screen.active{
+ display:flex;flex-direction:column;overflow:hidden;
+ padding-bottom:calc(clamp(10px,2dvh,20px) + env(safe-area-inset-bottom,0px));
+}
+#channels-screen .user-head,#channels-screen .screen-heading,
+#channels-screen .channel-buttons,#users-screen .view-header{flex:0 0 auto}
+#channels-screen .user-head{padding-block:clamp(8px,1.5dvh,18px)}
+#channels-screen .screen-heading{margin:clamp(8px,1.3dvh,18px) 0 clamp(8px,1.4dvh,16px)}
+#channels-screen .channel-list,#users-screen .channel-list{
+ flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+ overscroll-behavior-y:contain;align-content:start;
+ grid-auto-rows:max-content;scrollbar-gutter:stable;
+ padding:2px 2px 9px;
+}
+#channels-screen .channel-buttons{margin:clamp(8px,1.5dvh,16px) 0 0;min-width:0}
+#channels-screen .channel-buttons button{min-width:0;min-height:44px;overflow-wrap:anywhere}
+#users-screen .view-header{margin-bottom:12px}
+
+/* VU bilateral: o primeiro par fica no centro. */
+.meter-bars{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:clamp(2px,.55vw,5px);min-width:0}
+.meter-bars i{display:block;min-width:0;height:clamp(9px,1.6dvh,16px);border-radius:3px;background:#203143;transition:background-color .075s linear,box-shadow .075s linear}
+.meter-bars i:nth-child(12){margin-right:2px}
+.meter-bars i:nth-child(13){margin-left:2px}
+#meter-bars i:not(.on){background:#203143!important;box-shadow:none}
+#meter-bars i.vu-green.on{background:#19cf66;box-shadow:0 0 7px #19cf6640}
+#meter-bars i.vu-yellow.on{background:#f7da36;box-shadow:0 0 7px #f7da3640}
+#meter-bars i.vu-orange.on{background:#ff981a;box-shadow:0 0 7px #ff981a40}
+#meter-bars i.vu-red.on{background:#ff4353;box-shadow:0 0 8px #ff43534d}
+
+/* PTT sem scroll: dimensoes ajustadas a altura e largura disponíveis. */
+#ptt-screen.active{
+ display:flex;flex-direction:column;overflow:hidden;
+ gap:clamp(3px,.8dvh,10px);padding-top:clamp(6px,1.2dvh,16px);
+ padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#ptt-screen .ptt-heading,#ptt-screen .ptt-channel-block,#ptt-screen .meter,
+#ptt-screen .timing-row,#ptt-screen .rx-tx,#ptt-screen .ptt-nav{flex:0 0 auto;min-width:0;margin:0}
+#ptt-screen .ptt-heading{padding:clamp(8px,1.6dvh,16px) 48px;border-radius:clamp(12px,1.8dvh,22px)}
+#ptt-screen .ptt-heading h2{font-size:clamp(18px,3.5vmin,30px);line-height:1.13}
+#ptt-screen .ptt-heading span{font-size:clamp(11px,1.8vmin,14px)}
+#ptt-screen .ptt-channel-block{padding:clamp(7px,1.5dvh,14px);border-radius:clamp(13px,2dvh,20px);gap:clamp(7px,1.5vw,15px)}
+#ptt-screen .ptt-channel-block .avatar-circle{width:clamp(40px,8dvh,74px);height:clamp(40px,8dvh,74px);font-size:clamp(17px,3dvh,29px)}
+#ptt-screen .ptt-channel-block .grow strong{font-size:clamp(14px,2.6vmin,21px);line-height:1.2;overflow-wrap:anywhere}
+#ptt-screen .ptt-channel-block .grow small,#ptt-screen .connected-count small{font-size:clamp(9px,1.65vmin,11px)}
+#ptt-screen .ptt-channel-block .grow span{font-size:clamp(10px,1.75vmin,13px)}
+#ptt-screen .connected-count{padding-left:clamp(6px,1.2vw,12px)}
+#ptt-screen .connected-count b{font-size:clamp(17px,3.6dvh,29px)}
+#ptt-screen .meter{padding:clamp(7px,1.35dvh,14px);border-radius:clamp(13px,1.8dvh,20px)}
+#ptt-screen .meter-head{font-size:clamp(11px,1.8dvh,15px);margin-bottom:clamp(5px,.8dvh,10px)}
+#ptt-screen .timing-row{gap:clamp(7px,1.2vw,12px)}
+#ptt-screen .clock,#ptt-screen .last-msg{
+ display:grid;place-items:center;min-width:0;min-height:38px;
+ padding:clamp(6px,1.2dvh,12px) clamp(6px,1.1vw,12px);
+ border-radius:clamp(12px,2dvh,20px);font-size:clamp(13px,2.35dvh,20px)
+}
+#ptt-screen .last-msg{font-size:clamp(11px,1.8dvh,16px)}
+#ptt-screen .ptt-control{
+ flex:1 1 auto;min-height:0;min-width:0;margin:0;
+ display:flex;flex-direction:column;align-items:center;
+ justify-content:center;gap:clamp(5px,.9dvh,12px)
+}
+#ptt-screen .ptt-control button{
+ width:min(31dvh,49vw,300px);height:auto;aspect-ratio:1;
+ min-height:0;flex:0 1 auto;border-width:clamp(4px,.8dvh,9px);
+ outline-width:clamp(2px,.45dvh,4px);outline-offset:clamp(2px,.6dvh,5px)
+}
+#ptt-screen .ptt-status-note{font-size:clamp(10px,1.6dvh,13px);line-height:1.25;margin:0;max-width:95%;text-align:center}
+#ptt-screen .rx-tx{gap:clamp(5px,.85vw,12px)}
+#ptt-screen .rx-tx div{padding:clamp(5px,1dvh,11px) clamp(3px,.8vw,10px);border-radius:clamp(10px,1.7dvh,16px);font-size:clamp(10px,1.6dvh,13px)}
+#ptt-screen .rx-tx b{font-size:clamp(10px,1.7dvh,13px)}
+#ptt-screen .ptt-nav{
+ position:relative;bottom:auto;display:flex;gap:4px;justify-content:space-around;
+ padding:clamp(5px,.9dvh,10px) 4px;border-radius:10px 10px 0 0
+}
+#ptt-screen .ptt-nav button{flex:1 1 0;min-width:0;padding:clamp(5px,.8dvh,10px) clamp(2px,.5vw,10px);font-size:clamp(10px,1.7dvh,14px)}
+#ptt-screen .ptt-heading .audio-unlock{right:9px;top:50%;transform:translateY(-50%);width:clamp(30px,5dvh,38px);height:clamp(30px,5dvh,38px)}
+
+/* Horizontal compacto: dados a esquerda, botao PTT a direita. */
+@media (orientation:landscape) and (max-height:620px){
+ #ptt-screen.active{
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+  grid-template-rows:auto auto auto minmax(0,1fr) auto auto;
+  column-gap:clamp(6px,1.5vw,16px);row-gap:clamp(3px,.8dvh,8px);
+  padding:clamp(5px,.9dvh,10px) clamp(8px,1.3vw,18px) env(safe-area-inset-bottom,0px)
+ }
+ #ptt-screen .ptt-heading{grid-column:1;grid-row:1;padding:clamp(5px,1dvh,9px) 39px}
+ #ptt-screen .ptt-heading h2{font-size:clamp(17px,3.7dvh,25px)}
+ #ptt-screen .ptt-channel-block{grid-column:1;grid-row:2}
+ #ptt-screen .meter{grid-column:1;grid-row:3}
+ #ptt-screen .timing-row{grid-column:1;grid-row:4;align-self:start}
+ #ptt-screen .ptt-control{grid-column:2;grid-row:1 / 5;align-self:stretch;justify-self:stretch}
+ #ptt-screen .ptt-control button{width:min(46dvh,29vw,235px)}
+ #ptt-screen .rx-tx{grid-column:1 / -1;grid-row:5}
+ #ptt-screen .ptt-nav{grid-column:1 / -1;grid-row:6}
+ #ptt-screen .rx-tx div{padding:4px 6px}
+ #ptt-screen .ptt-nav{padding:3px 4px}
+ #ptt-screen .ptt-nav button{padding:5px 2px}
+ #ptt-screen .connected-count b{font-size:clamp(16px,5dvh,23px)}
+}
+@media (max-height:580px) and (orientation:portrait){
+ .topbar{padding-block:5px}
+ .brand img{width:34px;height:34px}
+ #ptt-screen.active{gap:3px;padding-top:4px}
+ #ptt-screen .ptt-channel-block .avatar-circle{width:38px;height:38px}
+ #ptt-screen .ptt-control button{width:min(25dvh,45vw,185px)}
+ #ptt-screen .ptt-status-note{font-size:10px}
+ #channels-screen .user-head{padding:5px 0}
+ #channels-screen .avatar-circle{width:46px;height:46px}
+ #channels-screen .user-identity b{font-size:19px}
+}
+@media (orientation:landscape) and (max-height:400px){
+ .topbar{padding:4px 12px}
+ .brand img{width:30px;height:30px}
+ .brand b{font-size:15px}.brand small{font-size:10px}
+ #ptt-screen .ptt-heading{padding-block:3px}
+ #ptt-screen .ptt-heading h2{font-size:16px}
+ #ptt-screen .ptt-channel-block{padding:5px 8px}
+ #ptt-screen .ptt-channel-block .avatar-circle{width:38px;height:38px}
+ #ptt-screen .meter{padding:5px 8px}
+ #ptt-screen .meter-head{margin-bottom:3px}
+ #ptt-screen .meter-bars i{height:9px}
+ #ptt-screen .clock,#ptt-screen .last-msg{min-height:31px;padding:3px 6px}
+ #ptt-screen .ptt-control button{width:min(40dvh,24vw,170px)}
+ #ptt-screen .rx-tx div{padding:2px 3px;font-size:10px}
+ #ptt-screen .ptt-nav{padding:2px}
+ #ptt-screen .ptt-nav button{padding:3px;font-size:10px}
+ #channels-screen .user-head{padding:4px 0}
+ #channels-screen .avatar-circle{width:40px;height:40px}
+ #channels-screen .screen-heading{margin:5px 0}
+ #channels-screen .channel-buttons{margin-top:6px}
+}

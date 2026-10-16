@@ -14,10 +14,38 @@ const state = { user:null, auth:null, profile:null, channels:[], selected:null, 
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
 let loginRoutingPromise=null;
 const lastMessage = new LocalLastMessage();
+// O nivel inicia no centro e acende segmentos espelhados ate as pontas.
+const VU_SIDE_BARS = 12;
+function vuDistanceFromCenter(index){
+ return index < VU_SIDE_BARS ? VU_SIDE_BARS - 1 - index : index - VU_SIDE_BARS;
+}
+function createVuMeter(){
+ const host=$('meter-bars');
+ if(!host)return;
+ host.replaceChildren();
+ for(let index=0;index<VU_SIDE_BARS*2;index++){
+   const distance=vuDistanceFromCenter(index);
+   const segment=document.createElement('i');
+   segment.className=distance>=10?'vu-red':distance>=8?'vu-orange':distance>=6?'vu-yellow':'vu-green';
+   segment.setAttribute('aria-hidden','true');
+   host.appendChild(segment);
+ }
+ updateVuMeter(0);
+}
+function updateVuMeter(value){
+ const level=Math.max(0,Math.min(100,Number(value)||0));
+ const meterText=$('meter-value');
+ if(meterText)meterText.textContent=Math.round(level)+'%';
+ const litPerSide=Math.ceil(level*VU_SIDE_BARS/100);
+ const bars=$('meter-bars')?.children;
+ if(!bars)return;
+ for(let index=0;index<bars.length;index++){
+   bars[index].classList.toggle('on',vuDistanceFromCenter(index)<litPerSide);
+ }
+}
 const audio = new ZLinkWebAudio({
  onStatus: message=>{console.warn('[WEB AUDIO]',message);if($('ptt-note'))$('ptt-note').textContent=message;},
- onMeter: value=>{const level=Math.max(0,Math.min(100,Number(value)||0));if($('meter-value'))$('meter-value').textContent=Math.round(level)+'%';
-   const bars=$('meter-bars')?.querySelectorAll('i');bars?.forEach((b,i)=>{b.classList.toggle('on', i < Math.ceil(level * bars.length / 100));});}
+ onMeter: updateVuMeter
 });
 function setAudioReadyUI(ok){
  const b=$('audio-unlock');if(!b)return;
@@ -653,7 +681,7 @@ function wire(){
 
  document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.holding||state.txGranted)stopTxNow();status(state.wsReady?'Segundo plano — áudio pode ser suspenso':'Segundo plano');}else{if(state.wsReady)status('Conectado');if(state.screen==='verify')checkEmailVerification().catch(()=>{});else if(state.screen==='contribution')checkContribution().catch(()=>{});else checkCurrentSession().catch(handleError);}});
  window.addEventListener('online',async()=>{await checkCurrentSession().catch(handleError);if(state.sessionId&&!state.sessionEnded&&!state.wsReady)startWS();});
- for(let i=0;i<15;i++){$('meter-bars').insertAdjacentHTML('beforeend',`<i ${i===0||i===14?'class="red"':''}></i>`);}
+ createVuMeter();
 }
 async function boot(){
  try{
