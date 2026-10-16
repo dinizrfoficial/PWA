@@ -142,6 +142,37 @@
  <div class="modal-overlay" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head"><h3 id="modal-title"></h3><button type="button" class="close" id="modal-close" aria-label="Fechar">✕</button></div><div id="modal-content"></div></div></div>
  <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
  </div>
+<script>
+  // Diagnóstico mínimo independente do módulo Firebase.
+  // Mantém a interface funcionando mesmo quando o JavaScript principal não carrega.
+  window.ZLINK_APP_EVENTS_READY = false;
+  (function(){
+    function showStartupError(){
+      if (window.ZLINK_APP_EVENTS_READY || !window.ZLINK_STANDALONE) return;
+      var msg = document.getElementById('login-message');
+      if (msg && !msg.textContent.trim()) {
+        msg.textContent = 'Não foi possível iniciar o acesso. Confira a internet, feche e abra o aplicativo novamente.';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      var form = document.getElementById('login-form');
+      if (form) form.addEventListener('submit', function(event){
+        if (!window.ZLINK_APP_EVENTS_READY) { event.preventDefault(); showStartupError(); }
+      });
+      var create = document.getElementById('open-register');
+      if (create) create.addEventListener('click', function(){
+        if (!window.ZLINK_APP_EVENTS_READY) showStartupError();
+      });
+      setTimeout(showStartupError, 12500);
+    });
+    window.addEventListener('error', function(event){
+      if (!window.ZLINK_APP_EVENTS_READY) {
+        console.error('[ZLINK WEB] Módulo indisponível:', event.message || 'Falha de carregamento');
+        showStartupError();
+      }
+    });
+  })();
+</script>
  <script src="./config.js"></script>
  <script src="./amrwb-panel-decoder.js"></script>
  <script>
@@ -168,5 +199,5 @@
    if(/iPad|iPhone|iPod/.test(navigator.userAgent)){btn.textContent='Como instalar no iPhone';}
   }());
  </script>
- <script type="module" src="./app.js"></script>
+ <script type="module" src="./app.js?v=5.1-login"></script>
 </body></html>

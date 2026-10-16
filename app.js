@@ -11,6 +11,7 @@ const validAvatar = (s) => typeof s === 'string' && (/^data:image\/(?:jpeg|jpg|w
 const avatarMarkup = (avatar, name) => validAvatar(avatar) ? `<img alt="" src="${escapeHTML(avatar)}">` : escapeHTML((name || '?').trim().charAt(0).toUpperCase());
 const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
+let loginRoutingPromise=null;
 const audio = new ZLinkWebAudio({
  onStatus: message=>{console.warn('[WEB AUDIO]',message);if($('ptt-note'))$('ptt-note').textContent=message;},
  onMeter: value=>{if($('meter-value'))$('meter-value').textContent=value+'%';
@@ -230,15 +231,53 @@ async function routeRegistrationStatus(s){
  screen('login');registrationMessage('login-message','Esta conta não possui cadastro finalizado. Consulte o suporte para recuperar seu cadastro.');
  await firebaseSignOut(state.auth);
 }
+function loginErrorMessage(error){
+  switch(error?.code){
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found': return 'E-mail ou senha incorretos. Confira os dados e tente novamente.';
+    case 'auth/invalid-email': return 'Informe um endereço de e-mail válido.';
+    case 'auth/user-disabled': return 'Esta conta foi desativada. Entre em contato com o suporte.';
+    case 'auth/too-many-requests': return 'Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.';
+    case 'auth/network-request-failed': return 'Não foi possível acessar a internet. Verifique sua conexão.';
+    case 'auth/invalid-api-key':
+    case 'auth/app-not-authorized':
+    case 'auth/requests-from-referer-blocked':
+    case 'auth/unauthorized-domain': return 'O serviço de autenticação está indisponível. Contate o suporte.';
+    case 'auth/operation-not-allowed': return 'O login por e-mail não está habilitado. Contate o suporte.';
+  }
+  if(error?.name==='AbortError')return 'O sistema demorou a responder. Verifique sua conexão e tente novamente.';
+  if(error?.httpStatus===401)return 'Sessão expirada. Entre novamente.';
+  if(error?.httpStatus===403)return 'A conta não tem permissão para entrar. '+String(error.message||'');
+  if(error?.httpStatus===404)return 'Não foi possível consultar o cadastro no sistema. Entre em contato com o suporte.';
+  if(error?.httpStatus>=500)return 'O sistema está temporariamente indisponível. Tente novamente mais tarde.';
+  if(error?.message==='Failed to fetch'||error?.name==='TypeError')return 'Não foi possível conectar ao sistema. Verifique sua internet.';
+  return String(error?.message||'Não foi possível entrar. Tente novamente.');
+}
 async function routeAuthenticatedUser(){
- if(!state.user||state.signupInProgress||state.sessionClosing)return;
- try{
-  const s=await api('/api/pending-registration/status');
-  await routeRegistrationStatus(s);
- }catch(e){status('Cadastro indisponível');
-  if(['NETWORK_ERROR','AbortError'].includes(e.code))registrationMessage('login-message','Não foi possível consultar o cadastro. Tente novamente.');
-  handleError(e);
- }
+  if(!state.user||state.signupInProgress||state.sessionClosing)return;
+  // Login Firebase e observador de sessão podem chamar a validação simultaneamente.
+  if(loginRoutingPromise)return loginRoutingPromise;
+  if(state.sessionId && state.screen==='channels')return;
+  const task=(async()=>{
+    try{
+      if(state.screen==='login') registrationMessage('login-message','Verificando sua conta no sistema...');
+      const s=await api('/api/pending-registration/status');
+      await routeRegistrationStatus(s);
+      if(state.screen!=='login')registrationMessage('login-message','');
+    }catch(e){
+      status('Acesso indisponível');
+      const message=loginErrorMessage(e);
+      if(state.screen==='login') registrationMessage('login-message',message);
+      else if(state.screen==='verify')registrationMessage('verify-message',message);
+      else if(state.screen==='contribution')registrationMessage('contribution-message',message);
+      console.error('[LOGIN] Falha ao validar conta:',e?.code||e?.httpStatus||e?.message);
+      handleError(e);
+    }
+  })();
+  loginRoutingPromise=task;
+  try{return await task;}finally{if(loginRoutingPromise===task)loginRoutingPromise=null;}
 }
 async function showContributions(s){
  state.registrationStatus=s;state.selectedAccessPlan='';
@@ -506,7 +545,26 @@ async function addChannel(id){if(!/^\d{8}$/.test(String(id)))throw Error('O ID d
 function wire(){
  $('modal-close').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal();};
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modal').hidden)closeModal();});
- $('login-form').onsubmit=async e=>{e.preventDefault();if(!state.auth){$('login-message').textContent='O acesso está temporariamente indisponível. Tente novamente mais tarde.';return;}const b=$('login-submit');b.disabled=true;$('login-message').textContent='';try{await signInWithEmailAndPassword(state.auth,$('login-email').value.trim(),$('login-password').value);$('login-password').value='';}catch(error){$('login-message').textContent='Não foi possível entrar. Confira e-mail, senha e conexão.';console.warn('Auth sign-in',error.code);}finally{b.disabled=false;}};
+ $('login-form').onsubmit=async e=>{
+  e.preventDefault();
+  const b=$('login-submit');
+  if(!state.auth){registrationMessage('login-message','O acesso está temporariamente indisponível. Verifique sua conexão e tente novamente.');return;}
+  b.disabled=true;
+  const original=b.textContent;
+  b.textContent='AGUARDE...';
+  registrationMessage('login-message','Validando e-mail e senha...');
+  try{
+    const result=await signInWithEmailAndPassword(state.auth,$('login-email').value.trim(),$('login-password').value);
+    state.user=result.user;
+    $('login-password').value='';
+    registrationMessage('login-message','Verificando sua conta no sistema...');
+    // Também valida quando a autenticação não dispara um novo onAuthStateChanged.
+    await routeAuthenticatedUser();
+  }catch(error){
+    registrationMessage('login-message',loginErrorMessage(error));
+    console.warn('[LOGIN] Firebase:',error?.code||error?.name||'falha');
+  }finally{b.disabled=false;b.textContent=original;}
+ };
  $('open-register').onclick=()=>openRegistration().catch(handleError);
  $('register-back').onclick=()=>screen('login');
  $('register-form').onsubmit=async e=>{e.preventDefault();const b=$('register-submit');b.disabled=true;registrationMessage('register-message','Validando dados do cadastro...');
@@ -543,7 +601,38 @@ function wire(){
  window.addEventListener('online',async()=>{await checkCurrentSession().catch(handleError);if(state.sessionId&&!state.sessionEnded&&!state.wsReady)startWS();});
  for(let i=0;i<15;i++){$('meter-bars').insertAdjacentHTML('beforeend',`<i ${i===0||i===14?'class="red"':''}></i>`);}
 }
-async function boot(){wire();screen('login');state.deviceId=deviceId();if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
- const config=cfg.firebase||{};if(!config.apiKey || config.apiKey.includes('COLOQUE_')){console.warn('[ZLINK WEB] Autenticação indisponível até configurar o Firebase Web.');return;}
- try{const fb=initializeApp(config);state.auth=getAuth(fb);await setPersistence(state.auth,browserLocalPersistence);onAuthStateChanged(state.auth,async user=>{state.user=user;if(!user){state.registrationStatus=null;state.registrationRecovery=null;state.paymentRef='';state.selectedAccessPlan='';state.signupInProgress=false;stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;if(!state.sessionClosing)status('Desconectado');screen('login');return;}if(state.signupInProgress)return;try{await routeAuthenticatedUser();}catch(e){handleError(e);}});}catch(error){console.error('[ZLINK WEB] Não foi possível inicializar a autenticação:',error);}}
+async function boot(){
+ try{
+   wire();
+   window.ZLINK_APP_EVENTS_READY=true;
+   screen('login');state.deviceId=deviceId();
+   if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
+   const config=cfg.firebase||{};
+   if(!config.apiKey || String(config.apiKey).includes('COLOQUE_')){
+     console.warn('[ZLINK WEB] Autenticação não inicializada: configuração pública indisponível.');
+     registrationMessage('login-message','O serviço de login está temporariamente indisponível. Contate o suporte.');
+     return;
+   }
+   const fb=initializeApp(config);
+   state.auth=getAuth(fb);
+   await setPersistence(state.auth,browserLocalPersistence);
+   onAuthStateChanged(state.auth,async user=>{
+     state.user=user;
+     if(!user){
+       state.registrationStatus=null;state.registrationRecovery=null;state.paymentRef='';state.selectedAccessPlan='';state.signupInProgress=false;
+       stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;
+       if(!state.sessionClosing)status('Desconectado');
+       screen('login');return;
+     }
+     if(state.signupInProgress)return;
+     await routeAuthenticatedUser();
+   },error=>{
+     console.error('[LOGIN] Observador de sessão:',error?.code||error?.message);
+     registrationMessage('login-message',loginErrorMessage(error));
+   });
+ }catch(error){
+   console.error('[LOGIN] Inicialização falhou:',error?.code||error?.message);
+   registrationMessage('login-message',loginErrorMessage(error));
+ }
+}
 if(window.ZLINK_STANDALONE) boot();
