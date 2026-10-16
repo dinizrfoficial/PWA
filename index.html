@@ -110,6 +110,20 @@
     <p id="contribution-message" class="feedback" role="status" aria-live="polite"></p>
    </div>
   </section>
+  <section class="screen" id="account-screen">
+   <div class="view-header account-heading"><button class="back" id="account-back" aria-label="Voltar aos canais">‹</button><h2>MINHA CONTA E RENOVAÇÃO</h2></div>
+   <div class="account-scroll">
+    <p class="account-badge" id="account-status-badge">Consultando acesso...</p>
+    <p class="account-feedback" id="account-feedback" aria-live="polite"></p>
+    <div id="account-details" class="account-details"></div>
+    <div class="account-actions">
+     <button type="button" class="primary" id="account-renew" disabled>ANTECIPAR CONTRIBUIÇÃO</button>
+     <button type="button" class="outline full" id="account-refresh">ATUALIZAR SITUAÇÃO DA CONTA</button>
+     <button type="button" class="outline full" id="account-check-payment">VERIFICAR ÚLTIMO PAGAMENTO</button>
+     <button type="button" class="outline full" id="account-support">SUPORTE E CONTATO</button>
+    </div>
+   </div>
+  </section>
   <section class="screen" id="channels-screen">
    <div class="user-head"><button class="avatar-button" id="my-avatar-btn" title="Meu perfil"><span class="avatar-circle" id="my-avatar"></span></button><div class="user-identity"><b id="my-username">Minha conta</b><small id="my-email"></small></div><button class="dots" id="profile-more" aria-label="Opções do perfil">⋮</button></div>
    <div class="screen-heading"><h2>CANAIS</h2><span class="hint">Toque e segure para opções</span></div>
@@ -132,7 +146,7 @@
    <div class="ptt-channel-block"><span id="ptt-channel-avatar" class="avatar-circle"></span><div class="grow"><small>CANAL ATUAL</small><strong id="ptt-channel-name">Canal</strong><span id="ptt-speaker">Aguardando transmissão</span></div><div class="connected-count"><small>CONECTADOS</small><b id="ptt-count">—</b><small id="ptt-type">PÚBLICO</small></div></div>
    <div class="meter"><div class="meter-head"><b>▥ Nível de áudio</b><span id="meter-value">0%</span></div><div class="meter-bars" id="meter-bars"></div></div>
    <div class="timing-row"><div class="clock" id="ptt-clock">◷ 00:00.0</div><button class="last-msg" id="ptt-last">◌ Última mensagem</button></div>
-   <div class="ptt-control"><button id="ptt-button" disabled aria-label="Segure para falar" title="Segure para transmitir em AMR-WB codificado no próprio aparelho"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3" fill="currentColor" stroke="none"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><p class="ptt-status-note" id="ptt-note">Preparando áudio AMR-WB...</p></div>
+   <div class="ptt-control"><button id="ptt-button" disabled aria-label="Segure para falar" title="Segure para falar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3" fill="currentColor" stroke="none"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><p class="ptt-status-note" id="ptt-note">Preparando áudio...</p></div>
    <div class="rx-tx"><div>RX<br><b id="rx-status">Aguardando</b></div><div>TX<br><b id="tx-status">Aguardando</b></div><div>● Canal<br><b id="channel-status">Disponível</b></div></div>
    <nav class="ptt-nav"><button id="ptt-back">‹ Canais</button><button class="chosen">● PTT</button><button id="ptt-users">♙ Usuários</button><button id="ptt-more">⋮ Menu</button></nav>
   </section>
@@ -199,5 +213,5 @@
    if(/iPad|iPhone|iPod/.test(navigator.userAgent)){btn.textContent='Como instalar no iPhone';}
   }());
  </script>
- <script type="module" src="./app.js?v=5.3-vu-layout"></script>
+ <script type="module" src="./app.js?v=5.4-conta-navegacao"></script>
 </body></html>

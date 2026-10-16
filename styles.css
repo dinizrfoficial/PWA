@@ -176,3 +176,23 @@ html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hi
  #channels-screen .screen-heading{margin:5px 0}
  #channels-screen .channel-buttons{margin-top:6px}
 }
+
+/* v5.4 — Minha Conta e Renovação no padrão visual do APK. */
+#account-screen.active{display:flex;flex-direction:column;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0px)}
+#account-screen .account-heading{flex:0 0 auto;min-width:0}
+#account-screen .account-heading h2{font-size:clamp(16px,3.5vw,23px);overflow-wrap:anywhere}
+.account-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding:0 2px 24px;display:grid;align-content:start;gap:12px}
+.account-badge{margin:0;border:1px solid #296f68;color:#8de8c6;border-radius:12px;background:#123c39;padding:12px 14px;font-weight:800}
+.account-badge.account-expired{background:#43261d;color:#ffd1ae;border-color:#8f503a}
+.account-feedback{min-height:18px;margin:0;color:#a5c6df;font-size:13px;line-height:1.5}
+.account-details{display:grid;gap:14px}
+.account-section{display:grid;gap:5px}
+.account-section h3{font-size:18px;color:#73c7fc;margin:8px 0 4px}
+.account-section p{margin:0;background:#172536;border:1px solid #304861;border-radius:12px;padding:13px 14px;line-height:1.65;color:#d4deea;font-size:14px}
+.account-detail{display:grid;gap:5px;background:#172536;border:1px solid #293d52;border-radius:10px;padding:12px 14px;min-width:0}
+.account-detail span{color:#afc0d4;font-size:12px}
+.account-detail strong{font-size:14px;color:#f5faff;overflow-wrap:anywhere;font-weight:700}
+.account-actions{display:grid;gap:10px;margin:8px 0 22px}
+.account-actions button{min-height:50px}
+.account-actions button:disabled{opacity:.52}
+@media(max-height:500px) and (orientation:landscape){#account-screen .account-scroll{padding-bottom:6px}.account-details{gap:9px}.account-section h3{margin-top:2px}}

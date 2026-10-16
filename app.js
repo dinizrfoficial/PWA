@@ -44,7 +44,7 @@ function updateVuMeter(value){
  }
 }
 const audio = new ZLinkWebAudio({
- onStatus: message=>{console.warn('[WEB AUDIO]',message);if($('ptt-note'))$('ptt-note').textContent=message;},
+ onStatus: message=>{console.warn('[WEB AUDIO]',message);if(!$('ptt-note'))return;const m=String(message||'').toLowerCase();if(m.includes('pronto')||m.includes('habilitad'))$('ptt-note').textContent='Áudio pronto';else if(m.includes('falha')||m.includes('indispon')||m.includes('erro'))$('ptt-note').textContent='Áudio indisponível. Verifique as permissões.';},
  onMeter: updateVuMeter
 });
 function setAudioReadyUI(ok){
@@ -148,7 +148,7 @@ function txGranted(data){
       const d=Math.max(0,performance.now()-state.txStartAt);
       $('ptt-clock').textContent=`◷ ${String(Math.floor(d/60000)).padStart(2,'0')}:${String(Math.floor(d/1000)%60).padStart(2,'0')}.${Math.floor(d%1000/100)}`;
     },100);
-    $('ptt-note').textContent='Transmitindo • AMR-WB local 23,85 kb/s';
+    $('ptt-note').textContent='Transmitindo';
   }catch(error){handleError(error);stopTxNow();}
   updateTxUI();
 }
@@ -156,6 +156,65 @@ function txGranted(data){
 function toast(msg){const el=$('toast');el.textContent=String(msg);el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4300);}
 function status(msg){state.status=msg;$('connection').textContent=state.screen==='login'?'Z-Link Talk Universal':msg;$('ptt-availability').textContent=msg;}
 function screen(name){if(name!=='ptt'&&name!=='users'){audio.stopReplay();state.replayActive=false;updateReplayUI();}if(name!=='ptt'&&name!=='users'&&(state.holding||state.txGranted))stopTxNow();state.screen=name;$('connection').textContent=name==='login'?'Z-Link Talk Universal':state.status;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('active',el.id===`${name}-screen`));window.scrollTo({top:0,behavior:'instant'});if(name!=='ptt'&&name!=='users') sendWS({type:'channel_view_presence',channelId:null});if(name==='ptt' && state.selected)sendWS({type:'channel_view_presence',channelId:state.selected.id});}
+// A PWA instalada usa uma unica URL. Interceptamos o Voltar do sistema para
+// navegar pelas telas sem que o navegador feche o aplicativo imediatamente.
+function showCloseGuidance(kind){
+ const platform=/iPad|iPhone|iPod/i.test(navigator.userAgent)?'iPhone':/Android/i.test(navigator.userAgent)?'Android':'PC';
+ const msg=kind==='min'
+  ?(platform==='iPhone'?'Deslize para cima para voltar à Tela de Início. O aplicativo ficará em segundo plano, sujeito às restrições de áudio do iOS.':platform==='Android'?'Use o gesto ou botão Início do Android para voltar à tela inicial. A PWA poderá ser suspensa pelo sistema.':'Use o botão de minimizar da janela ou volte à área de trabalho.')
+  :(platform==='iPhone'?'Abra o seletor de aplicativos e deslize a janela do Z-Link Talk para cima.':platform==='Android'?'Abra os aplicativos recentes e deslize o Z-Link Talk para fechar.':'Feche a janela do Z-Link Talk no botão X.');
+ modal(kind==='min'?'Como minimizar':'Como fechar',area=>{
+  const wrapper=document.createElement('div');wrapper.className='modal-stack';
+  const p=document.createElement('p');p.textContent=msg;
+  const note=document.createElement('p');note.textContent='Minimizar ou fechar não significa sair da conta. O navegador pode suspender o áudio em segundo plano.';
+  const ok=document.createElement('button');ok.className='primary';ok.textContent='ENTENDI';ok.onclick=closeModal;
+  wrapper.append(p,note,ok);area.append(wrapper);
+ });
+}
+function showExitOptions(){
+ modal('Fechar ou minimizar?',area=>{
+  const box=document.createElement('div');box.className='modal-stack';
+  const p=document.createElement('p');p.textContent='Você está na lista de canais. Deseja continuar ou ver como minimizar/fechar o aplicativo?';box.append(p);
+  for(const [label,fn,style] of [
+    ['CONTINUAR NO APP',closeModal,'primary'],
+    ['COMO MINIMIZAR',()=>showCloseGuidance('min'),'outline'],
+    ['COMO FECHAR',()=>showCloseGuidance('close'),'outline']
+  ]){const button=document.createElement('button');button.type='button';button.className=style;button.textContent=label;button.onclick=fn;box.append(button);}
+  area.append(box);
+ });
+}
+function goBack(){
+ // Primeiro fecha o menu/diálogo atual, como no Android.
+ if(!$('modal').hidden){closeModal();return;}
+ switch(state.screen){
+  case 'users':screen('ptt');break;
+  case 'ptt':case 'search':case 'create':case 'account':screen('channels');break;
+  case 'register':screen('login');break;
+  case 'verify':case 'contribution':
+   confirmModal('Voltar ao login','Deseja sair desta etapa e voltar à tela de login?','VOLTAR AO LOGIN')
+    .then(yes=>{if(yes)logout().catch(handleError);});break;
+  case 'channels':showExitOptions();break;
+  default:if(state.user)screen('channels');else showExitOptions();
+ }
+}
+let systemBackReady=false;
+function setupSystemBack(){
+ if(systemBackReady)return;
+ systemBackReady=true;
+ if(window.ZLINK_STANDALONE){
+  // Um estado extra evita o fechamento imediato pelo botao Voltar do Android.
+  try{
+   history.replaceState({...history.state,zlinkRoot:true},'',location.href);
+   history.pushState({zlinkBackGuard:true},'',location.href);
+   window.addEventListener('popstate',()=>{
+    // Recoloca a sentinela, permitindo repetidos Voltar sem sair da PWA.
+    try{history.pushState({zlinkBackGuard:true},'',location.href);}catch(error){console.warn('[NAV]',error);}
+    goBack();
+   });
+  }catch(error){console.warn('[NAV] Não foi possível ativar o botão Voltar:',error);}
+ }
+}
+
 function closeModal(){ $('modal').hidden=true;$('modal-content').replaceChildren();const r=modalResolver;modalResolver=null;if(r)r(false); }
 function modal(title,render){closeModal();$('modal-title').textContent=title;const area=$('modal-content');if(typeof render==='string')area.innerHTML=render;else render(area);$('modal').hidden=false;}
 function menu(title,entries){modal(title,area=>{const list=document.createElement('div');list.className='modal-menu';for(const entry of entries){const btn=document.createElement('button');btn.textContent=entry.label;if(entry.danger)btn.classList.add('danger');btn.onclick=()=>{closeModal();Promise.resolve().then(entry.fn).catch(handleError)};list.appendChild(btn);}area.append(list);});}
@@ -483,7 +542,7 @@ async function initAccount(){
    status('Conta sem acesso');screen('login');
    if(['PAYMENT_REQUIRED','REGISTRATION_PAYMENT_REQUIRED','ACCESS_EXPIRED','ACCOUNT_NOT_ACTIVATED'].includes(error.code)||error.httpStatus===402){
     // O token de pagamento nunca é gerado no navegador.
-    menu('Contribuição necessária',[{label:'Solicitar renovação por e-mail',fn:openRenewal},{label:'Cancelar',fn:()=>{}}]);
+    menu('Contribuição necessária',[{label:'Minha Conta e Renovação',fn:openRenewal},{label:'Cancelar',fn:()=>{}}]);
    }
    throw error;
   }
@@ -565,7 +624,7 @@ async function checkCurrentSession(){
  }finally{state.checkingSession=false;}
 }
 function handleSignal(data){switch(data.type){
- case 'init':state.wsReady=true;status('Conectado');if(data.channels) {state.channels=data.channels;state.defaultChannelId=data.defaultChannelId;renderChannels();}state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Segure o PTT para falar • codificacao AMR-WB no aparelho.';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='TX local indisponivel: '+e.message;});updateTxUI();break;
+ case 'init':state.wsReady=true;status('Conectado');if(data.channels) {state.channels=data.channels;state.defaultChannelId=data.defaultChannelId;renderChannels();}state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Pronto para transmitir';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='Transmissão indisponível. Confira o áudio e tente novamente.';});updateTxUI();break;
  case 'tx_granted':txGranted(data);break;
  case 'channel_state':case 'channels_updated':case 'channels_state':if(Array.isArray(data.channels)){state.channels=data.channels;renderChannels();}break;
  case 'channel_selected':break;
@@ -575,7 +634,7 @@ function handleSignal(data){switch(data.type){
   audio.stopReplay();state.replayActive=false;updateReplayUI();
   // A captura e local: um novo TX substitui imediatamente a ultima mensagem.
   lastMessage.begin(state.user?.uid,data.channelId,data.name||'Usuário');
-  state.txUser=data.name||'Usuário';$('ptt-speaker').textContent=state.txUser+' transmitindo';$('rx-status').textContent='Recebendo AMR-WB';state.lastRxAt=Date.now();
+  state.txUser=data.name||'Usuário';$('ptt-speaker').textContent=state.txUser+' transmitindo';$('rx-status').textContent='Recebendo';state.lastRxAt=Date.now();
   audio.beginRx(data.channelId).catch(handleError);break;
  }
  case 'stop_tx':
@@ -616,8 +675,123 @@ async function logout(){
  try{if(state.auth)await firebaseSignOut(state.auth);}catch(e){console.warn('[SESSION] Sair:',e?.message);}
  state.user=null;status('Desconectado');screen('login');
 }
-async function openRenewal(){try{await shareOrOpen('renew');}catch(error){handleError(error);}}
-async function shareOrOpen(mode){if(mode!=='renew')return;modal('Minha Conta e Renovação',area=>{const d=document.createElement('div');d.className='modal-stack';d.innerHTML='<p>Para proteger sua conta, solicite um link de renovação no e-mail cadastrado no Z-Link Talk.</p><label>E-mail cadastrado<input type="email" id="renew-email" required></label><button type="button" class="primary" id="renew-send">Enviar link de verificação</button><p id="renew-feedback" class="muted" aria-live="polite"></p>';area.append(d);$('renew-email').value=state.user?.email||'';$('renew-send').onclick=async()=>{const email=$('renew-email').value.trim();if(!email)return;$('renew-send').disabled=true;try{const res=await fetch(`${apiBase}/api/renewal/request-link`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const data=await res.json();if(!res.ok||data.success===false)throw Error(data.error||'Não foi possível enviar.');$('renew-feedback').textContent='E-mail enviado com sucesso! Confira sua caixa de entrada.';toast('Link de renovação solicitado');}catch(error){$('renew-feedback').textContent=error.message||'Falha ao enviar link';}finally{$('renew-send').disabled=false;}};});}
+// Mesma API e opcoes do AccountStatusActivity do APK Android.
+let accountStatus=null;
+const lastPaymentKey=()=>`zlinktalk-web-last-payment-${state.user?.uid||'unknown'}`;
+const brCurrency=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+function brDate(t){const ms=Number(t||0);return ms>0?new Date(ms).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'Não informado';}
+function remainingTime(t){const d=Number(t||0)-Date.now();if(!Number(t)||d<=0)return 'Encerrado';const days=Math.floor(d/86400000);const hours=Math.floor(d%86400000/3600000);return days>0?`${days} dia(s) e ${hours} hora(s)`:`${hours} hora(s) e ${Math.floor(d%3600000/60000)} minuto(s)`;}
+function accountDetail(label,value){return `<div class="account-detail"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`;}
+function accountSection(title,html){return `<section class="account-section"><h3>${escapeHTML(title)}</h3>${html}</section>`;}
+function renderAccountStatus(s){
+ accountStatus=s;
+ const result=$('account-details');if(!result)return;
+ const types={trial:'Degustação',paid:s.lastAdminGrantAt>0&&!s.lastPaymentAt?'Liberado pela administração':'Pago / contribuição',free:'Gratuito',legacy:'Legado'};
+ const type=types[s.accessType]||'Conta Z-Link Talk';
+ const label=!s.active?'Contribuição necessária — acesso vencido':s.trialActive?'Degustação ativa':s.paidActive?'Pagamento ativo':'Ativo';
+ let markup=accountSection('Situação do acesso',[
+  accountDetail('Usuário',s.username||state.profile?.username||'—'),
+  accountDetail('E-mail',state.user?.email||'—'),
+  accountDetail('Tipo da conta',type),
+  accountDetail('Estado',label),
+  accountDetail('Contribuição exigida',s.contributionRequired?'Sim':'Não')].join(''));
+ if(s.trialStartedAt||s.trialEndsAt){
+  markup+=accountSection('Período de degustação',[
+   accountDetail('Início',brDate(s.trialStartedAt)),accountDetail('Término',brDate(s.trialEndsAt)),
+   accountDetail('Situação',s.trialActive?'Em andamento':'Encerrado')].join(''));
+ }
+ if(s.accessExpiresAt||s.nextExpiration){
+  markup+=accountSection('Validade de acesso',[
+   accountDetail('Vencimento',brDate(s.nextExpiration||s.accessExpiresAt)),
+   accountDetail('Tempo restante',remainingTime(s.nextExpiration||s.accessExpiresAt))].join(''));
+ }
+ if(s.lastPaymentAt){
+  markup+=accountSection('Última contribuição registrada',[
+   accountDetail('Data',brDate(s.lastPaymentAt)),
+   accountDetail('Plano',s.lastPaymentPlan||'Não informado'),
+   s.lastPaymentAmount>0?accountDetail('Valor',brCurrency(s.lastPaymentAmount)):''].join(''));
+ }
+ if(s.lastAdminGrantAt){markup+=accountSection('Autorização administrativa',accountDetail('Última liberação',brDate(s.lastAdminGrantAt)));}
+ markup+=accountSection('Sobre a renovação',`<p>${s.paymentEligible?'Você pode antecipar sua contribuição. O tempo de acesso restante será preservado e o novo período acrescentado após o vencimento atual. Pagamento pelo Mercado Pago, sem renovação automática.':'Esta conta não exige contribuição neste momento. A administração controla a elegibilidade para renovação.'}</p>`);
+ result.innerHTML=markup;
+ $('account-renew').disabled=!s.paymentEligible;
+ $('account-status-badge').textContent=label;
+ $('account-status-badge').classList.toggle('account-expired',!s.active);
+}
+async function refreshAccountStatus(showToast=false){
+ const feedback=$('account-feedback');
+ if(!state.user)return;
+ feedback.textContent='Consultando a situação da conta...';
+ $('account-refresh').disabled=true;
+ try{
+  const s=await api('/api/access/status');
+  renderAccountStatus(s);
+  feedback.textContent='Situação consultada no sistema.';
+  if(showToast)toast('Situação da conta atualizada.');
+ }catch(error){feedback.textContent='Não foi possível atualizar a conta: '+(error?.message||'Falha de conexão');if(showToast)handleError(error);}
+ finally{$('account-refresh').disabled=false;}
+}
+async function openRenewal(){
+ if(!state.user){toast('Entre na sua conta para consultar o acesso.');return;}
+ screen('account');
+ await refreshAccountStatus();
+}
+async function chooseAccountPlan(){
+ if(!accountStatus?.paymentEligible){toast('Esta conta não está habilitada para novas contribuições.');return;}
+ const policy=await loadRegistrationPolicy();
+ const plans=(policy.plans||[]).filter(p=>p.enabled!==false&&p.id&&Number(p.amount)>0);
+ if(!policy.mercadoPagoConfigured||!plans.length){toast('O pagamento está temporariamente indisponível.');return;}
+ modal('Antecipar contribuição',area=>{
+  const wrap=document.createElement('div');wrap.className='modal-stack';
+  const intro=document.createElement('p');intro.textContent='Escolha o período de acesso. Os dias restantes serão preservados.';wrap.append(intro);
+  const group=document.createElement('div');group.className='contribution-plans';
+  plans.forEach((plan,i)=>{
+   const label=document.createElement('label');label.className='access-plan';
+   const input=document.createElement('input');input.type='radio';input.name='account-plan';input.value=plan.id;input.checked=i===0;
+   const text=document.createElement('span');text.textContent=`${plan.label} — ${brCurrency(plan.amount)}`;
+   label.append(input,text);group.append(label);
+  });wrap.append(group);
+  const next=document.createElement('button');next.className='primary';next.textContent='CONTINUAR';next.onclick=async()=>{
+   const id=group.querySelector('input:checked')?.value;if(!id)return;
+   next.disabled=true;next.textContent='Preparando pagamento...';
+   try{
+    const order=await api('/api/access/payment/create',{method:'POST',body:{planId:id}});
+    if(!/^https:\/\//i.test(order.checkoutUrl||''))throw Error('O sistema não disponibilizou o pagamento seguro.');
+    if(order.paymentRef)localStorage.setItem(lastPaymentKey(),order.paymentRef);
+    modal('Pagamento pelo Mercado Pago',node=>{
+     const d=document.createElement('div');d.className='modal-stack';
+     const p=document.createElement('p');p.textContent='O pagamento foi preparado. Abra o Mercado Pago e volte ao Z-Link Talk para conferir a aprovação.';
+     const link=document.createElement('a');link.href=order.checkoutUrl;link.target='_blank';link.rel='noopener noreferrer';link.className='primary checkout-link';link.textContent='ABRIR MERCADO PAGO';
+     const check=document.createElement('button');check.className='outline';check.textContent='VERIFICAR PAGAMENTO';check.onclick=()=>{closeModal();checkAccountPayment().catch(handleError);};
+     d.append(p,link,check);node.append(d);
+    });
+   }catch(error){next.disabled=false;next.textContent='CONTINUAR';handleError(error);}
+  };wrap.append(next);area.append(wrap);
+ });
+}
+async function checkAccountPayment(){
+ const ref=localStorage.getItem(lastPaymentKey())||'';
+ if(!ref){
+  const ok=await confirmModal('Verificar último pagamento','Não há uma referência de pagamento salva neste aparelho. Isso pode acontecer quando a contribuição foi feita em outro dispositivo. Deseja atualizar a situação da conta?','ATUALIZAR CONTA');
+  if(ok)await refreshAccountStatus(true);
+  return;
+ }
+ $('account-feedback').textContent='Verificando o último pagamento...';
+ try{
+  const info=await api(`/api/access/payment/status?paymentRef=${encodeURIComponent(ref)}`);
+  if(info.approved){toast('Pagamento aprovado!');await refreshAccountStatus();return;}
+  const statusMap={pending:'Pagamento aguardando confirmação.',in_process:'Pagamento em processamento.',rejected:'Pagamento não aprovado.',cancelled:'Pagamento cancelado.',canceled:'Pagamento cancelado.'};
+  const result=statusMap[String(info.status).toLowerCase()]||`Situação do pagamento: ${info.status||'Não informada'}.`;
+  $('account-feedback').textContent=result;toast(result);
+ }catch(error){$('account-feedback').textContent=error?.message||'Falha ao verificar o pagamento.';handleError(error);}
+}
+function accountSupport(){
+ menu('Suporte e contato',[
+  {label:'E-mail — dinizrfoficial@gmail.com',fn:()=>{location.href='mailto:dinizrfoficial@gmail.com';}},
+  {label:'WhatsApp — conversar com o suporte',fn:()=>{window.open('https://wa.me/5533999077551?text='+encodeURIComponent('Olá! Preciso de suporte com o Z-Link Talk Universal.'),'_blank','noopener,noreferrer');}},
+  {label:'Voltar',fn:()=>{}}
+ ]);
+}
 async function shareLink(url){try{if(navigator.share)await navigator.share({url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);toast('Link copiado');}else{const d=await promptModal('Compartilhar link',[{label:'Endereço',name:'url',value:url}],'Fechar');} }catch(e){if(e.name!=='AbortError')handleError(e)}}
 function chooseImage(target){state.uploadTarget=target;$('avatar-file').value='';$('avatar-file').click();}
 async function compressImage(file){if(!/^image\/(jpeg|png|webp)$/.test(file.type))throw Error('Escolha uma imagem JPG, PNG ou WebP.');if(file.size>18*1024*1024)throw Error('Imagem muito grande.');const bm=await createImageBitmap(file);try{for(const w of [360,280,220,170,140,110]){const scale=Math.min(1,w/Math.max(bm.width,bm.height));const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(bm.width*scale));cv.height=Math.max(1,Math.round(bm.height*scale));cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);for(const q of [.81,.68,.55]){const encoded=cv.toDataURL('image/jpeg',q);if(encoded.length<77000)return encoded;}}throw Error('Não foi possível reduzir a foto para o limite de tamanho.');}finally{bm.close?.();}}
@@ -625,8 +799,9 @@ async function saveImage(file){const target=state.uploadTarget;if(!file||!target
 async function searchChannels(all=false,more=false){const q=$('channel-search').value.trim();if(!all&&!more&&q.length<2){toast('Digite pelo menos 2 caracteres');return;}if(!more){queryOffset=0;lastSearchQuery=all?'':q;$('search-results').replaceChildren();}const url=all||!lastSearchQuery?`/api/channels/public?offset=${queryOffset}`:`/api/channels/search?q=${encodeURIComponent(lastSearchQuery)}&offset=${queryOffset}`;const result=await api(url);const root=$('search-results');for(const c of result.channels||[]){const row=document.createElement('div');row.className='result-row';row.innerHTML=`<span class="avatar-circle">${avatarMarkup(c.avatar,c.name)}</span><span class="grow"><b>${escapeHTML(c.name)}</b><small>ID: ${escapeHTML(c.id)} • ${c.memberCount??0} inscrito(s)</small></span><button ${c.alreadyAdded?'disabled':''}>${c.alreadyAdded?'Adicionado':'Adicionar'}</button>`;row.querySelector('button').onclick=()=>addChannel(c.id);root.append(row);}queryOffset=result.nextOffset||0;queryHasMore=!!result.hasMore;root.querySelector('[data-more]')?.remove();if(result.hasMore){const b=document.createElement('button');b.textContent='Carregar mais';b.className='outline';b.dataset.more='yes';b.onclick=()=>perform(()=>searchChannels(false,true));root.append(b);}if(!root.children.length)root.innerHTML='<p class="empty">Nenhum canal encontrado.</p>';}
 async function addChannel(id){if(!/^\d{8}$/.test(String(id)))throw Error('O ID deve conter 8 dígitos.');await api('/api/channels/add',{method:'POST',body:{channelId:id}});await loadChannels();toast('Canal adicionado');screen('channels');}
 function wire(){
+ setupSystemBack();
  $('modal-close').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal();};
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modal').hidden)closeModal();});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'||e.key==='BrowserBack'){e.preventDefault();goBack();}});
  $('login-form').onsubmit=async e=>{
   e.preventDefault();
   const b=$('login-submit');
@@ -648,7 +823,7 @@ function wire(){
   }finally{b.disabled=false;b.textContent=original;}
  };
  $('open-register').onclick=()=>openRegistration().catch(handleError);
- $('register-back').onclick=()=>screen('login');
+ $('register-back').onclick=goBack;
  $('register-form').onsubmit=async e=>{e.preventDefault();const b=$('register-submit');b.disabled=true;registrationMessage('register-message','Validando dados do cadastro...');
   try{await createAccountFromForm();}catch(error){const hints={'auth/email-already-in-use':'Este e-mail já está cadastrado.','auth/weak-password':'Escolha uma senha mais forte.','auth/invalid-email':'E-mail inválido.','auth/network-request-failed':'Sem conexão com o Firebase. Verifique sua internet.'};registrationMessage('register-message',hints[error.code]||error.message);console.warn('[REGISTER]',error.code||error.message);}finally{if(state.screen==='register')b.disabled=false;}
  };
@@ -663,13 +838,18 @@ function wire(){
  $('contribution-check').onclick=()=>checkContribution().catch(e=>registrationMessage('contribution-message',e.message));
  $('contribution-logout').onclick=()=>logout().catch(handleError);
  $('reset-password').onclick=async()=>{if(!state.auth){toast('Configure o Firebase primeiro.');return;}const email=$('login-email').value.trim();if(!email){toast('Informe seu e-mail acima.');return;}try{await sendPasswordResetEmail(state.auth,email);toast('Se a conta estiver apta, o e-mail será enviado.');}catch{toast('Verifique o e-mail e tente novamente.');}};
+ $('account-back').onclick=goBack;
+ $('account-renew').onclick=()=>chooseAccountPlan().catch(handleError);
+ $('account-refresh').onclick=()=>refreshAccountStatus(true).catch(handleError);
+ $('account-check-payment').onclick=()=>checkAccountPayment().catch(handleError);
+ $('account-support').onclick=accountSupport;
  $('profile-more').onclick=profileMenu;$('my-avatar-btn').onclick=profileMenu;
  $('add-channel-btn').onclick=()=>screen('search');$('create-channel-btn').onclick=()=>{state.createAvatar='';$('create-form').reset();$('create-avatar-preview').textContent='♟';screen('create');};
- document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>screen(b.dataset.back));
+ document.querySelectorAll('[data-back]').forEach(b=>b.onclick=goBack);
  $('create-avatar-button').onclick=()=>chooseImage({type:'create'});$('avatar-file').onchange=e=>perform(()=>saveImage(e.target.files?.[0]));
  $('create-form').onsubmit=e=>{e.preventDefault();perform(async()=>{const form=e.target;const name=$('create-name').value.trim();if(name.length<3)throw Error('Nome com pelo menos 3 caracteres');const data=await api('/api/channels/create',{method:'POST',body:{name,description:$('create-description').value.trim(),type:form.querySelector('input[name="type"]:checked').value,avatar:state.createAvatar}});await loadChannels();screen('channels');toast(`Canal ${data.channel?.name||name} criado!`);});};
  $('channel-search-btn').onclick=()=>perform(()=>searchChannels(false));$('channel-all-btn').onclick=()=>perform(()=>searchChannels(true));$('channel-add-id').onclick=()=>perform(()=>addChannel($('channel-id').value.trim()));
- $('ptt-back').onclick=()=>screen('channels');$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=()=>{if(state.selected)channelMenu(state.selected);};$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
+ $('ptt-back').onclick=goBack;$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=()=>{if(state.selected)channelMenu(state.selected);};$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
  const ptt=$('ptt-button');ptt.style.touchAction='none';
  ptt.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();ptt.setPointerCapture?.(e.pointerId);beginTx().catch(handleError);});
  for(const evt of ['pointerup','pointercancel','lostpointercapture'])ptt.addEventListener(evt,()=>stopTxNow());
@@ -679,7 +859,7 @@ function wire(){
  document.addEventListener('keyup',e=>{if(e.code==='Space'&&state.holding){e.preventDefault();stopTxNow();}});
  $('audio-unlock').onclick=()=>audio.ensurePlayback().then(()=>{setAudioReadyUI(true);toast('Áudio habilitado');sendWS({type:'sync_rx'});}).catch(handleError);
 
- document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.holding||state.txGranted)stopTxNow();status(state.wsReady?'Segundo plano — áudio pode ser suspenso':'Segundo plano');}else{if(state.wsReady)status('Conectado');if(state.screen==='verify')checkEmailVerification().catch(()=>{});else if(state.screen==='contribution')checkContribution().catch(()=>{});else checkCurrentSession().catch(handleError);}});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.holding||state.txGranted)stopTxNow();status(state.wsReady?'Segundo plano — áudio pode ser suspenso':'Segundo plano');}else{if(state.wsReady)status('Conectado');if(state.screen==='verify')checkEmailVerification().catch(()=>{});else if(state.screen==='contribution')checkContribution().catch(()=>{});else if(state.screen==='account'){checkCurrentSession().then(()=>refreshAccountStatus()).catch(handleError);}else checkCurrentSession().catch(handleError);}});
  window.addEventListener('online',async()=>{await checkCurrentSession().catch(handleError);if(state.sessionId&&!state.sessionEnded&&!state.wsReady)startWS();});
  createVuMeter();
 }
