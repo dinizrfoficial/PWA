@@ -14,6 +14,9 @@ const state = { user:null, auth:null, profile:null, channels:[], selected:null, 
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
 let loginRoutingPromise=null;
 const lastMessage = new LocalLastMessage();
+// Mostra a restauracao da sessao salva sem expor o formulario de login.
+function hideStartupOverlay(){const panel=$('startup-session');if(panel)panel.hidden=true;}
+
 // O nivel inicia no centro e acende segmentos espelhados ate as pontas.
 const VU_SIDE_BARS = 12;
 function vuDistanceFromCenter(index){
@@ -257,7 +260,9 @@ function exitSubmenu(){
 }
 // O menu de operacao no canal e independente das opcoes do canal (avatar).
 function pttScreenMenu(){
+ // Mesmo menu geral nos tres pontinhos de Canais e no menu da tela PTT.
  menu('Menu',[
+  {label:'Editar perfil',fn:profileMenu},
   {label:'Sair',fn:exitSubmenu},
   {label:'Desconectar',danger:true,fn:confirmDisconnect}
  ]);
@@ -335,7 +340,7 @@ function setupSystemBack(){
 }
 
 function closeModal(){ $('modal').hidden=true;$('modal-content').replaceChildren();const r=modalResolver;modalResolver=null;if(r)r(false); }
-function modal(title,render){closeModal();$('modal-title').textContent=title;const area=$('modal-content');if(typeof render==='string')area.innerHTML=render;else render(area);$('modal').hidden=false;}
+function modal(title,render){hideStartupOverlay();closeModal();$('modal-title').textContent=title;const area=$('modal-content');if(typeof render==='string')area.innerHTML=render;else render(area);$('modal').hidden=false;}
 function menu(title,entries){modal(title,area=>{const list=document.createElement('div');list.className='modal-menu';for(const entry of entries){const btn=document.createElement('button');btn.textContent=entry.label;if(entry.danger)btn.classList.add('danger');btn.onclick=()=>{closeModal();Promise.resolve().then(entry.fn).catch(handleError)};list.appendChild(btn);}area.append(list);});}
 function promptModal(title,fields,submitLabel='Salvar'){return new Promise(resolve=>{modal(title,area=>{const form=document.createElement('form');form.className='modal-stack';for(const field of fields){const label=document.createElement('label');label.textContent=field.label;const input=document.createElement(field.type==='textarea'?'textarea':'input');input.name=field.name;input.value=field.value||'';input.required=!!field.required;if(field.maxLength) input.maxLength=field.maxLength;if(field.type && field.type!=='textarea')input.type=field.type;label.append(input);form.append(label);}const button=document.createElement('button');button.className='primary';button.textContent=submitLabel;button.type='submit';form.append(button);form.onsubmit=e=>{e.preventDefault();const values=Object.fromEntries(new FormData(form));const r=modalResolver;modalResolver=null;closeModal();r?.(values);};area.append(form);});modalResolver=resolve;});}
 function confirmModal(title,message,affirmative='Confirmar'){return new Promise(resolve=>{modal(title,area=>{const box=document.createElement('div');box.className='modal-stack';const p=document.createElement('p');p.textContent=message;box.append(p);const yes=document.createElement('button');yes.className='primary';yes.textContent=affirmative;yes.onclick=()=>{const r=modalResolver;modalResolver=null;closeModal();r?.(true)};box.append(yes);const no=document.createElement('button');no.className='outline';no.textContent='Cancelar';no.onclick=closeModal;box.append(no);area.append(box);});modalResolver=resolve;});}
@@ -802,10 +807,10 @@ function channelMenu(channel){const c=state.channels.find(c=>c.id===channel.id)|
  {label:'Informações do canal',fn:()=>infoChannel(c)},
  {label:state.defaultChannelId===c.id?'Remover canal padrão':'Definir canal padrão',fn:()=>perform(async()=>{await api('/api/channels/set-default',{method:'POST',body:{channelId:state.defaultChannelId===c.id?'':c.id}});await loadChannels();toast('Canal padrão atualizado');})},
  {label:c.enabled===false?'Ativar canal':'Desativar canal',fn:()=>perform(async()=>{await api('/api/channels/set-enabled',{method:'POST',body:{channelId:c.id,enabled:c.enabled===false}});await loadChannels();})},
- {label:'Compartilhar convite do canal',fn:()=>shareLink(`${cfg.siteUrl.replace(/\/$/,'')}/invite/channel/${encodeURIComponent(c.id)}`)} ];
+ {label:'Compartilhar convite do canal',fn:()=>shareChannel(c)} ];
  if(owner){actions.push({label:'Trocar foto do canal',fn:()=>chooseImage({type:'channel',channelId:c.id})},{label:'Alterar nome e descrição',fn:()=>editChannel(c)},{label:'Excluir canal definitivamente',danger:true,fn:()=>deleteChannel(c)});}else actions.push({label:'Remover da minha lista',danger:true,fn:()=>removeChannel(c)});
  menu(c.name,actions);}
-function infoChannel(c){modal('Informações do canal',`<div class="modal-stack"><p><b>Nome:</b> ${escapeHTML(c.name)}<br><b>ID:</b> ${escapeHTML(c.id)}<br><b>Tipo:</b> ${c.type==='private'?'Privado':'Público'}<br><b>Descrição:</b> ${escapeHTML(c.description||'Sem descrição')}</p><button id="info-share" class="outline">Compartilhar canal</button></div>`);$('info-share').onclick=()=>shareLink(`${String(cfg.siteUrl).replace(/\/$/,'')}/invite/channel/${encodeURIComponent(c.id)}`);}
+function infoChannel(c){modal('Informações do canal',`<div class="modal-stack"><p><b>Nome:</b> ${escapeHTML(c.name)}<br><b>ID:</b> ${escapeHTML(c.id)}<br><b>Tipo:</b> ${c.type==='private'?'Privado':'Público'}<br><b>Descrição:</b> ${escapeHTML(c.description||'Sem descrição')}</p><button id="info-share" class="outline">Compartilhar canal</button></div>`);$('info-share').onclick=()=>shareChannel(c);}
 async function perform(task){try{await task();}catch(e){handleError(e)}}
 async function editChannel(c){const values=await promptModal('Editar canal',[{label:'Nome do canal',name:'name',value:c.name,maxLength:40,required:true},{label:'Descrição',name:'description',value:c.description,maxLength:200,type:'textarea'}]);if(!values)return;await perform(async()=>{await api('/api/channels/profile',{method:'POST',body:{channelId:c.id,...values}});await loadChannels();toast('Canal atualizado');});}
 async function deleteChannel(c){if(!await confirmModal('Excluir canal',`Excluir definitivamente o canal ${c.name}? Esta ação também afeta seus participantes.`, 'Excluir canal'))return;await perform(async()=>{await api('/api/channels/delete',{method:'POST',body:{channelId:c.id}});state.selected=null;await loadChannels();toast('Canal excluído');});}
@@ -934,7 +939,22 @@ function accountSupport(){
   {label:'Voltar',fn:()=>{}}
  ]);
 }
-async function shareLink(url){try{if(navigator.share)await navigator.share({url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);toast('Link copiado');}else{const d=await promptModal('Compartilhar link',[{label:'Endereço',name:'url',value:url}],'Fechar');} }catch(e){if(e.name!=='AbortError')handleError(e)}}
+// Convite usa a rota publica instalada em app.zlinktalk.com.br e conserva o ID de oito digitos.
+function buildChannelInvitation(channel){
+ const id=String(channel?.id??'');
+ if(!/^\d{8}$/.test(id))throw Error('ID do canal inválido para compartilhar.');
+ const url=`https://app.zlinktalk.com.br/invite/?channel=${encodeURIComponent(id)}`;
+ return `Você foi convidado para entrar no canal "${String(channel?.name||'Canal')}" no app Z-Link Talk.\n\n${url}`;
+}
+async function shareChannel(channel){
+ const text=buildChannelInvitation(channel);
+ try{
+  // Enviamos texto unico para evitar que mensageiros dupliquem o endereco.
+  if(navigator.share){await navigator.share({text});return;}
+  if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);toast('Convite copiado');return;}
+  await promptModal('Compartilhar convite',[{label:'Mensagem de convite',name:'invite',type:'textarea',value:text}],'Fechar');
+ }catch(e){if(e?.name!=='AbortError')handleError(e);}
+}
 function chooseImage(target){state.uploadTarget=target;$('avatar-file').value='';$('avatar-file').click();}
 async function compressImage(file){if(!/^image\/(jpeg|png|webp)$/.test(file.type))throw Error('Escolha uma imagem JPG, PNG ou WebP.');if(file.size>18*1024*1024)throw Error('Imagem muito grande.');const bm=await createImageBitmap(file);try{for(const w of [360,280,220,170,140,110]){const scale=Math.min(1,w/Math.max(bm.width,bm.height));const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(bm.width*scale));cv.height=Math.max(1,Math.round(bm.height*scale));cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);for(const q of [.81,.68,.55]){const encoded=cv.toDataURL('image/jpeg',q);if(encoded.length<77000)return encoded;}}throw Error('Não foi possível reduzir a foto para o limite de tamanho.');}finally{bm.close?.();}}
 async function saveImage(file){const target=state.uploadTarget;if(!file||!target)return;const avatar=await compressImage(file);if(target.type==='create'){state.createAvatar=avatar;$('create-avatar-preview').innerHTML=`<img src="${avatar}" alt="Imagem do novo canal">`;toast('Imagem preparada');return;}if(target.type==='user'){await api('/api/users/avatar',{method:'POST',body:{avatar}});state.profile.avatar=avatar;updateProfile();toast('Foto de perfil atualizada');return;}if(target.type==='channel'){await api('/api/channels/avatar',{method:'POST',body:{channelId:target.channelId,avatar}});await loadChannels();toast('Foto do canal atualizada');}}
@@ -985,7 +1005,7 @@ function wire(){
  $('account-refresh').onclick=()=>refreshAccountStatus(true).catch(handleError);
  $('account-check-payment').onclick=()=>checkAccountPayment().catch(handleError);
  $('account-support').onclick=accountSupport;
- $('profile-more').onclick=profileMenu;$('my-avatar-btn').onclick=profileMenu;
+ $('profile-more').onclick=pttScreenMenu;$('my-avatar-btn').onclick=profileMenu;
  $('add-channel-btn').onclick=()=>screen('search');$('create-channel-btn').onclick=()=>{state.createAvatar='';$('create-form').reset();$('create-avatar-preview').textContent='♟';screen('create');};
  document.querySelectorAll('[data-back]').forEach(b=>b.onclick=goBack);
  $('create-avatar-button').onclick=()=>chooseImage({type:'create'});$('avatar-file').onchange=e=>perform(()=>saveImage(e.target.files?.[0]));
@@ -1020,11 +1040,19 @@ async function boot(){
    wire();
    window.ZLINK_APP_EVENTS_READY=true;
    screen('login');state.deviceId=deviceId();
+   // Se o provedor não responder, evita uma tela de carregamento eterna.
+   setTimeout(()=>{
+     if($('startup-session')?.hidden===false){
+       hideStartupOverlay();
+       if(state.screen==='login')registrationMessage('login-message','Não foi possível verificar sua sessão. Confira sua conexão e tente entrar.');
+     }
+   },25000);
    if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
    const config=cfg.firebase||{};
    if(!config.apiKey || String(config.apiKey).includes('COLOQUE_')){
      console.warn('[ZLINK WEB] Autenticação não inicializada: configuração pública indisponível.');
      registrationMessage('login-message','O serviço de login está temporariamente indisponível. Contate o suporte.');
+     hideStartupOverlay();
      return;
    }
    const fb=initializeApp(config);
@@ -1036,17 +1064,20 @@ async function boot(){
        state.registrationStatus=null;state.registrationRecovery=null;state.paymentRef='';state.selectedAccessPlan='';state.signupInProgress=false;
        stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;state.rxTransmission=null;state.usersChannelId=null;
        if(!state.sessionClosing)status('Desconectado');
-       screen('login');return;
+       screen('login');hideStartupOverlay();return;
      }
-     if(state.signupInProgress)return;
-     await routeAuthenticatedUser();
+     if(state.signupInProgress){hideStartupOverlay();return;}
+     try{await routeAuthenticatedUser();}
+     finally{hideStartupOverlay();}
    },error=>{
      console.error('[LOGIN] Observador de sessão:',error?.code||error?.message);
      registrationMessage('login-message',loginErrorMessage(error));
+     hideStartupOverlay();
    });
  }catch(error){
    console.error('[LOGIN] Inicialização falhou:',error?.code||error?.message);
    registrationMessage('login-message',loginErrorMessage(error));
+   hideStartupOverlay();
  }
 }
 if(window.ZLINK_STANDALONE) boot();

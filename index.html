@@ -59,6 +59,14 @@
   <div class="brand"><img src="./icons/icon-192.png" alt="" width="43" height="43"><div><b>Z-Link Talk</b><small id="connection">Z-Link Talk Universal</small></div></div>
   
  </header>
+ <div id="startup-session" class="startup-session" role="status" aria-live="polite" aria-label="Iniciando sessão">
+  <div class="startup-session-content">
+   <img src="./icons/icon-192.png" alt="" width="74" height="74">
+   <div class="startup-session-spinner" aria-hidden="true"></div>
+   <strong>Iniciando login...</strong>
+   <span>Verificando sua sessão...</span>
+  </div>
+ </div>
  <main id="main">
   <section class="screen login-screen active" id="login-screen">
    <div class="login-logo"><img src="./icons/icon-192.png" alt="Ícone Z-Link Talk" width="112" height="112"><h1>Z-LINK TALK</h1><p>Entre na sua conta</p></div>
@@ -125,7 +133,7 @@
    </div>
   </section>
   <section class="screen" id="channels-screen">
-   <div class="user-head"><button class="avatar-button" id="my-avatar-btn" title="Meu perfil"><span class="avatar-circle" id="my-avatar"></span></button><div class="user-identity"><b id="my-username">Minha conta</b><small id="my-email"></small></div><button class="dots" id="profile-more" aria-label="Opções do perfil">⋮</button></div>
+   <div class="user-head"><button class="avatar-button" id="my-avatar-btn" title="Meu perfil"><span class="avatar-circle" id="my-avatar"></span></button><div class="user-identity"><b id="my-username">Minha conta</b><small id="my-email"></small></div><button class="dots" id="profile-more" aria-label="Menu geral">⋮</button></div>
    <div class="screen-heading"><h2>CANAIS</h2><span class="hint">Toque e segure para opções</span></div>
    <div class="channel-list" id="channels-list" aria-live="polite"></div>
    <div class="channel-buttons"><button class="outline" id="add-channel-btn">ADICIONAR CANAL</button><button class="outline" id="create-channel-btn">CRIAR CANAL</button></div>
@@ -170,6 +178,8 @@
       if (msg && !msg.textContent.trim()) {
         msg.textContent = 'Não foi possível iniciar o acesso. Confira a internet, feche e abra o aplicativo novamente.';
       }
+      var splash = document.getElementById('startup-session');
+      if (splash) splash.hidden = true;
     }
     document.addEventListener('DOMContentLoaded', function(){
       var form = document.getElementById('login-form');
@@ -216,5 +226,5 @@
    if(/iPad|iPhone|iPod/.test(navigator.userAgent)){btn.textContent='Como instalar no iPhone';}
   }());
  </script>
- <script type="module" src="./app.js?v=5.4-conta-navegacao"></script>
+ <script type="module" src="./app.js?v=5.8-login-menus-convite"></script>
 </body></html>
