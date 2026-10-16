@@ -10,7 +10,7 @@ const escapeHTML = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;'
 const apiBase = String(cfg.apiBase || '').replace(/\/+$/, '');
 const validAvatar = (s) => typeof s === 'string' && (/^data:image\/(?:jpeg|jpg|webp|png);base64,[a-z0-9+/=\r\n]+$/i.test(s) || /^https:\/\/[^\s]+$/i.test(s));
 const avatarMarkup = (avatar, name) => validAvatar(avatar) ? `<img alt="" src="${escapeHTML(avatar)}">` : escapeHTML((name || '?').trim().charAt(0).toUpperCase());
-const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, replayActive:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', rxTransmission:null, usersChannelId:null, webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
+const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, replayActive:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, autoOpenDefaultPending:false, autoOpenDefaultSession:'', createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', rxTransmission:null, usersChannelId:null, webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
 let loginRoutingPromise=null;
 const lastMessage = new LocalLastMessage();
@@ -631,7 +631,7 @@ async function endCurrentSession(reason='Você entrou com outro dispositivo.', t
  state.sessionEnded=true;
  state.sessionId='';
  stopConnection();
- state.selected=null;state.profile=null;state.channels=[];state.users=[];
+ state.selected=null;state.profile=null;state.channels=[];state.users=[];state.autoOpenDefaultPending=false;state.autoOpenDefaultSession='';
  status('Sessão encerrada');
  screen('login');
  $('login-message').textContent='A sessão anterior foi encerrada. Entre novamente para continuar.';
@@ -676,11 +676,28 @@ async function initAccount(){
  if(state.sessionEnded)return;
  state.profile=me;updateProfile();await loadChannels();
  if(state.sessionEnded)return;
+ // Abre uma vez o canal padrão ao iniciar a sessão, após a autorização do WebSocket.
+ state.autoOpenDefaultPending=Boolean(state.defaultChannelId);
+ state.autoOpenDefaultSession=state.sessionId;
  screen('channels');startWS();
 }
 function updateProfile(){const p=state.profile||{};$('my-username').textContent=p.username||state.user?.displayName||'Minha conta';$('my-email').textContent=state.user?.email||'';$('my-avatar').innerHTML=avatarMarkup(p.avatar,p.username);}
-async function loadChannels(){const result=await api('/api/channels/mine');state.channels=Array.isArray(result.channels)?result.channels:[];state.defaultChannelId=result.defaultChannelId||null;if(state.selected)state.selected=state.channels.find(c=>c.id===state.selected.id)||null;renderChannels();if(state.selected)updatePTT();}
-function channelHTML(c){const flagged=c.removed?'Removido':c.blocked?'Bloqueado':c.enabled===false?'Desativado':c.type==='private'?'Privado':'Público';return `<button class="channel-card-main" data-open="${escapeHTML(c.id)}"><span class="avatar-circle" data-avatar="${escapeHTML(c.id)}">${avatarMarkup(c.avatar,c.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(c.name)}</span><span class="channel-id">ID: ${escapeHTML(c.id)} ${state.defaultChannelId===c.id?'• Padrão':''}</span><span class="channel-type">${flagged}</span><span class="channel-description">${escapeHTML(c.description||'')}</span></span></button><button class="channel-menu" aria-label="Opções do canal" data-menu="${escapeHTML(c.id)}">⋮</button>`;}
+async function loadChannels(){const result=await api('/api/channels/mine');state.channels=Array.isArray(result.channels)?result.channels:[];state.defaultChannelId=result.defaultChannelId == null ? null : String(result.defaultChannelId);if(state.selected)state.selected=state.channels.find(c=>c.id===state.selected.id)||null;renderChannels();if(state.selected)updatePTT();}
+function isDefaultChannel(c){return Boolean(c)&&String(state.defaultChannelId||'')===String(c.id||'');}
+function channelHTML(c){
+ const flagged=c.removed?'Removido':c.blocked?'Bloqueado':c.enabled===false?'Desativado':c.type==='private'?'Privado':'Público';
+ const defaultPin=isDefaultChannel(c)?`<span class="zt-default-pin" title="Canal padrão" aria-label="Canal padrão"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l5 5-3 1-3 5 1 3-3 1-7-7 1-3 3 1 5-3z"/><path d="M9 15l-6 6"/></svg></span>`:'';
+ return `<button class="channel-card-main" data-open="${escapeHTML(c.id)}"><span class="avatar-circle" data-avatar="${escapeHTML(c.id)}">${avatarMarkup(c.avatar,c.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(c.name)}${defaultPin}</span><span class="channel-id">ID: ${escapeHTML(c.id)}${isDefaultChannel(c)?' • Canal padrão':''}</span><span class="channel-type">${flagged}</span><span class="channel-description">${escapeHTML(c.description||'')}</span></span></button><button class="channel-menu" aria-label="Opções do canal" data-menu="${escapeHTML(c.id)}">⋮</button>`;
+}
+function openDefaultChannelAfterLogin(){
+ if(!state.autoOpenDefaultPending || !state.sessionId || state.autoOpenDefaultSession!==state.sessionId || !state.wsReady || state.sessionEnded)return;
+ state.autoOpenDefaultPending=false; // apenas na primeira inicialização; não força nova abertura em reconexões
+ if(state.selected || state.screen!=='channels')return; // escolha manual e outras telas têm prioridade
+ const channel=state.channels.find(c=>isDefaultChannel(c));
+ if(!channel || channel.removed || channel.blocked || channel.enabled===false)return;
+ openChannel(channel).catch(handleError);
+}
+
 function renderChannels(){const list=$('channels-list');list.replaceChildren();if(!state.channels.length){list.innerHTML='<p class="empty">Nenhum canal na lista. Adicione um canal público ou crie o seu.</p>';return;}
  for(const c of state.channels){const card=document.createElement('div');card.className='channel-card';card.innerHTML=channelHTML(c);const main=card.querySelector('[data-open]');const avatar=card.querySelector('[data-avatar]');main.onclick=e=>{if(main.dataset.preventClick==='yes'){main.dataset.preventClick='no';return;}if(e.target.closest('[data-avatar]')){channelMenu(c);return;}openChannel(c).catch(handleError);};card.querySelector('[data-menu]').onclick=()=>channelMenu(c);
  let press=null,longPress=false;main.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;longPress=false;press=setTimeout(()=>{longPress=true;main.dataset.preventClick='yes';channelMenu(c);},570);});for(const ev of ['pointerup','pointerleave','pointercancel'])main.addEventListener(ev,()=>clearTimeout(press));main.addEventListener('contextmenu',e=>{e.preventDefault();clearTimeout(press);if(!longPress)channelMenu(c);});list.append(card);
@@ -748,7 +765,7 @@ async function checkCurrentSession(){
  }finally{state.checkingSession=false;}
 }
 function handleSignal(data){switch(data.type){
- case 'init':state.wsReady=true;status('Conectado');if(data.channels) {state.channels=data.channels;state.defaultChannelId=data.defaultChannelId;renderChannels();}state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});renderChannelPresence();updateCrossChannelBanner();audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Pronto para transmitir';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='Transmissão indisponível. Confira o áudio e tente novamente.';});updateTxUI();break;
+ case 'init':state.wsReady=true;status('Conectado');if(Array.isArray(data.channels)) {state.channels=data.channels;}if(Object.prototype.hasOwnProperty.call(data,'defaultChannelId'))state.defaultChannelId=data.defaultChannelId == null ? null : String(data.defaultChannelId);renderChannels();openDefaultChannelAfterLogin();state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});renderChannelPresence();updateCrossChannelBanner();audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Pronto para transmitir';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='Transmissão indisponível. Confira o áudio e tente novamente.';});updateTxUI();break;
  case 'tx_granted':txGranted(data);break;
  case 'channel_state':case 'channels_updated':case 'channels_state':
   if(Array.isArray(data.channels)){state.channels=data.channels;renderChannels();updateCrossChannelBanner();}
@@ -805,7 +822,7 @@ function renderUsers(){const list=$('users-list');list.replaceChildren();const u
 function channelMenu(channel){const c=state.channels.find(c=>c.id===channel.id)||channel;const owner=c.ownerUid===state.profile?.uid;const actions=[
  {label:'Entrar no canal',fn:()=>openChannel(c)},
  {label:'Informações do canal',fn:()=>infoChannel(c)},
- {label:state.defaultChannelId===c.id?'Remover canal padrão':'Definir canal padrão',fn:()=>perform(async()=>{await api('/api/channels/set-default',{method:'POST',body:{channelId:state.defaultChannelId===c.id?'':c.id}});await loadChannels();toast('Canal padrão atualizado');})},
+ {label:isDefaultChannel(c)?'Remover canal padrão':'Definir canal padrão',fn:()=>perform(async()=>{await api('/api/channels/set-default',{method:'POST',body:{channelId:isDefaultChannel(c)?'':c.id}});await loadChannels();toast('Canal padrão atualizado');})},
  {label:c.enabled===false?'Ativar canal':'Desativar canal',fn:()=>perform(async()=>{await api('/api/channels/set-enabled',{method:'POST',body:{channelId:c.id,enabled:c.enabled===false}});await loadChannels();})},
  {label:'Compartilhar convite do canal',fn:()=>shareChannel(c)} ];
  if(owner){actions.push({label:'Trocar foto do canal',fn:()=>chooseImage({type:'channel',channelId:c.id})},{label:'Alterar nome e descrição',fn:()=>editChannel(c)},{label:'Excluir canal definitivamente',danger:true,fn:()=>deleteChannel(c)});}else actions.push({label:'Remover da minha lista',danger:true,fn:()=>removeChannel(c)});
@@ -1062,7 +1079,7 @@ async function boot(){
      state.user=user;
      if(!user){
        state.registrationStatus=null;state.registrationRecovery=null;state.paymentRef='';state.selectedAccessPlan='';state.signupInProgress=false;
-       stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;state.rxTransmission=null;state.usersChannelId=null;
+       stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;state.autoOpenDefaultPending=false;state.autoOpenDefaultSession='';state.rxTransmission=null;state.usersChannelId=null;
        if(!state.sessionClosing)status('Desconectado');
        screen('login');hideStartupOverlay();return;
      }

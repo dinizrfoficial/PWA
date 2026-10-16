@@ -361,3 +361,6 @@ html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hi
 }
 @keyframes zt-session-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.startup-session-spinner{animation-duration:2.5s}}
+
+/* v5.11: indicador de canal padrão junto ao nome */
+.channel-name{display:inline-flex;align-items:center;flex-wrap:wrap;column-gap:7px;row-gap:3px}.zt-default-pin{display:inline-flex;align-items:center;justify-content:center;color:#72cdff;filter:drop-shadow(0 1px 3px rgba(44,169,255,.35));flex:none}.zt-default-pin svg{width:20px;height:20px}
