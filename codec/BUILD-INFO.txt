@@ -1,0 +1,2 @@
+Fonte VisualOn (Apache-2.0): https://github.com/mstorsjo/vo-amrwbenc
+Commit: 884dd247dbeb6b2bd2cd3291c4872de95700291f
