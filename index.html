@@ -17,18 +17,34 @@
  <style>
   html.zt-pwa-startup .shell{display:none!important}
   html:not(.zt-pwa-startup) .zt-install-landing{display:none!important}
-  .zt-install-landing{min-height:100dvh;background:radial-gradient(ellipse at 80% 0%,#1b4383 0,#0b1428 45%,#070c17 100%);color:#e9f1ff;font:15px/1.6 Inter,Roboto,Arial,sans-serif;padding:30px 18px;display:grid;place-items:center}
-  .zt-install-card{width:min(470px,100%);padding:31px 25px;border:1px solid rgba(167,198,253,.2);border-radius:24px;background:#121e33;box-shadow:0 20px 65px rgba(0,0,0,.3);text-align:center}
-  .zt-install-logo{height:94px;width:94px;object-fit:contain;border-radius:25px;margin:0 auto 12px;display:block}
-  .zt-install-card h1{font-size:27px;margin:5px 0 10px;letter-spacing:-.4px}
-  .zt-install-sub{color:#bbcae1;margin:0 auto 20px;max-width:380px}
-  .zt-install-action{display:block;width:100%;padding:15px;background:#3578ff;color:#fff;font:800 15px Inter,Arial,sans-serif;border:0;border-radius:14px;cursor:pointer;margin:16px 0 0}
-  .zt-install-action:hover{background:#2468ee}
-  .zt-install-action:disabled{background:#52637f;cursor:default}
-  .zt-install-steps{text-align:left;background:#0a1527;border:1px solid #253856;border-radius:14px;padding:15px 18px;margin-top:18px;color:#c7d8ee;font-size:13px}
-  .zt-install-steps p{margin:4px 0 12px}.zt-install-steps p:last-child{margin-bottom:0}
-  .zt-install-warning{margin:20px 0 4px;background:#382913;color:#ffe0a2;border:1px solid #7b5422;padding:12px 14px;border-radius:12px;font-size:12px;text-align:left}
-  .zt-install-back{display:inline-block;color:#a1bbf6;text-decoration:none;font-size:13px;margin-top:16px}
+  .zt-install-landing{min-height:100dvh;background:radial-gradient(ellipse at 13% -5%,#123e76 0,transparent 48%),radial-gradient(ellipse at 105% 85%,rgba(17,65,123,.40),transparent 55%),#070e1b;color:#e9f2ff;font:15px/1.55 Inter,Roboto,Arial,sans-serif;padding:clamp(16px,3vh,42px) 15px;display:grid;place-items:center;isolation:isolate}
+  .zt-install-card{position:relative;width:min(490px,100%);overflow:hidden;padding:clamp(24px,5.3vw,38px);border:1px solid rgba(140,184,242,.19);border-radius:28px;background:linear-gradient(150deg,#12233d 0%,#0d1a2e 64%,#0c1628 100%);box-shadow:0 24px 90px #0207108c,0 1px 0 #ffffff11 inset;text-align:center}
+  .zt-install-card:before{content:'';position:absolute;width:250px;height:250px;background:radial-gradient(circle,rgba(44,144,255,.19),transparent 68%);top:-130px;left:50%;transform:translateX(-50%);pointer-events:none}
+  .zt-install-logo{position:relative;height:96px;width:96px;object-fit:contain;border-radius:25px;margin:3px auto 16px;display:block;filter:drop-shadow(0 12px 22px rgba(10,135,255,.26))}
+  .zt-install-kicker{position:relative;margin:0;color:#8bc3ff;font-size:11px;letter-spacing:.16em;font-weight:850;text-transform:uppercase}
+  .zt-install-card h1{position:relative;font-size:clamp(25px,5.9vw,33px);margin:6px 0 8px;line-height:1.17;letter-spacing:-.8px;color:#f8fbff}
+  .zt-install-sub{position:relative;color:#b9cae3;margin:0 auto 16px;max-width:380px;font-size:14px;line-height:1.58}
+  .zt-install-highlights{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin:18px 0 19px;padding:0;list-style:none}
+  .zt-install-highlights li{border:1px solid #385270;border-radius:999px;padding:6px 10px;color:#d1e4fd;font-size:11.5px;line-height:1.25;background:#172b46}
+  .zt-install-action{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:15px 16px;background:linear-gradient(110deg,#2384ff,#1260df);color:#fff;font:800 15px Inter,Arial,sans-serif;border:1px solid #4f9cff;border-radius:15px;cursor:pointer;margin:17px 0 0;box-shadow:0 9px 24px rgba(8,78,199,.32);transition:filter .18s,transform .18s}
+  .zt-install-action:hover{filter:brightness(1.1)}.zt-install-action:active{transform:scale(.99)}.zt-install-action:disabled{opacity:.68;cursor:wait}
+  .zt-install-action svg{width:19px;height:19px;flex:none}
+  .zt-install-feedback{margin:12px 0 0;color:#a9cafa;font-size:12.5px;line-height:1.45;min-height:0}
+  .zt-install-progress[hidden],.zt-install-steps[hidden]{display:none!important}
+  .zt-install-progress{margin:14px 0 0;text-align:left}
+  .zt-install-progress-track{height:6px;overflow:hidden;background:#233858;border-radius:99px;border:1px solid #334c6a}
+  .zt-install-progress-fill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,#1780ff,#6de6ff);animation:zt-install-running 1.5s ease-in-out infinite;transform:translateX(-105%)}
+  .zt-install-progress.complete .zt-install-progress-fill{animation:none;width:100%;transform:none;background:#42d5a1}
+  @keyframes zt-install-running{0%{transform:translateX(-105%)}100%{transform:translateX(285%)}}
+  .zt-install-progress-note{display:block;color:#afc0d5;margin-top:7px;font-size:11px;text-align:center}
+  .zt-install-steps{text-align:left;background:#0a182c;border:1px solid #2b4262;border-radius:16px;padding:15px 17px;margin-top:20px;color:#c7d9ef;font-size:13px}
+  .zt-install-steps strong{display:block;font-size:13px;color:#e8f3ff;margin-bottom:8px}
+  .zt-install-steps ol{margin:0;padding-left:18px}.zt-install-steps li{padding-left:2px;margin:7px 0}.zt-install-steps li:last-child{margin-bottom:0}
+  .zt-install-tip{margin:16px 0 0;color:#91a6c0;font-size:11.7px}
+  .zt-install-back{display:inline-flex;align-items:center;gap:5px;color:#a4c3f3;text-decoration:none;font-size:12.5px;margin-top:17px}.zt-install-back:hover{text-decoration:underline}
+  @media(max-height:590px) and (orientation:landscape){.zt-install-landing{display:block;min-height:100dvh;padding:10px}.zt-install-card{margin:auto;width:min(670px,100%);padding:14px 22px}.zt-install-logo{width:50px;height:50px;float:left;margin:0 14px 4px 0}.zt-install-kicker,.zt-install-card h1,.zt-install-sub{text-align:left}.zt-install-card h1{font-size:22px}.zt-install-highlights{clear:both;margin:10px 0 8px}.zt-install-steps{margin-top:10px}.zt-install-back{margin-top:8px}}
+  @media(prefers-reduced-motion:reduce){.zt-install-progress-fill{animation-duration:3s}.zt-install-action{transition:none}}
+
  </style>
  <script>
   window.ZLINK_STANDALONE=window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || window.navigator.standalone===true;
@@ -39,20 +55,19 @@
 </head>
 <body>
  <div class="zt-install-landing" id="zt-install-landing">
-  <div class="zt-install-card">
-   <img class="zt-install-logo" src="./icons/icon-192.png" alt="Ícone Z-Link Talk Universal">
-   <h1>Z-Link Talk Universal</h1>
-   <p class="zt-install-sub">Instale na tela inicial do seu iPhone, Android ou computador para abrir em uma janela de aplicativo, com o ícone do Z-Link Talk.</p>
-   <button type="button" id="zt-install-main" class="zt-install-action">Instalar aplicativo</button>
-   <div id="zt-install-feedback" role="status" aria-live="polite"></div>
-   <div class="zt-install-steps" id="zt-install-steps">
-    <p><strong>iPhone/iPad:</strong> use o Safari, toque em Compartilhar e selecione <strong>Adicionar à Tela de Início</strong>. Confirme a opção de abrir como aplicativo.</p>
-    <p><strong>Android:</strong> no Chrome, abra o menu ⋮ e escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</p>
-    <p><strong>PC:</strong> no Chrome ou Edge, use o ícone de instalação na barra de endereços ou o menu do navegador.</p>
-   </div>
-   <div class="zt-install-warning"><strong>Versão de testes.</strong> O codec AMR-WB local já está incluído. A comunicação PTT ainda precisa ser validada entre dispositivos antes do uso regular.</div>
+  <section class="zt-install-card" aria-labelledby="zt-install-title">
+   <img class="zt-install-logo" src="./icons/icon-192.png" alt="Ícone do Z-Link Talk Universal" width="96" height="96">
+   <p class="zt-install-kicker">Comunicação PTT</p>
+   <h1 id="zt-install-title">Z-Link Talk Universal</h1>
+   <p class="zt-install-sub">Instale no iPhone, Android ou computador. Entre com sua conta e converse pelos seus canais, com o mesmo visual do Z-Link Talk.</p>
+   <ul class="zt-install-highlights" aria-label="Principais recursos"><li>Canais PTT</li><li>Seu perfil</li><li>Minha conta e renovação</li></ul>
+   <button type="button" id="zt-install-main" class="zt-install-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg><span id="zt-install-button-label">Instalar aplicativo</span></button>
+   <div id="zt-install-feedback" class="zt-install-feedback" role="status" aria-live="polite"></div>
+   <div id="zt-install-progress" class="zt-install-progress" role="progressbar" aria-label="Aguardando instalação pelo navegador" aria-valuetext="Aguardando confirmação" hidden><div class="zt-install-progress-track"><div class="zt-install-progress-fill"></div></div><span id="zt-install-progress-note" class="zt-install-progress-note">Aguardando o navegador…</span></div>
+   <div id="zt-install-steps" class="zt-install-steps" hidden><strong id="zt-install-steps-title">Como instalar</strong><ol id="zt-install-steps-list"></ol></div>
+   <p class="zt-install-tip">Depois da instalação, abra o aplicativo pelo ícone criado no seu aparelho.</p>
    <a class="zt-install-back" href="https://zlinktalk.com.br/">← Voltar ao site oficial</a>
-  </div>
+  </section>
  </div>
  <div class="shell">
  <header class="topbar" id="topbar">
@@ -205,26 +220,77 @@
  <script>
   (function(){
    if('serviceWorker' in navigator && location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
-   var btn=document.getElementById('zt-install-main'), feedback=document.getElementById('zt-install-feedback');
    if(window.ZLINK_STANDALONE)return;
-   function platformHelp(){
-     if(/iPad|iPhone|iPod/.test(navigator.userAgent))return 'No iPhone, toque no botão Compartilhar do Safari e em Adicionar à Tela de Início.';
-     return 'Abra o menu do Chrome ou Edge e selecione Instalar aplicativo ou Adicionar à tela inicial.';
+   var button=document.getElementById('zt-install-main');
+   var buttonLabel=document.getElementById('zt-install-button-label');
+   var feedback=document.getElementById('zt-install-feedback');
+   var progress=document.getElementById('zt-install-progress');
+   var progressNote=document.getElementById('zt-install-progress-note');
+   var steps=document.getElementById('zt-install-steps');
+   var stepsTitle=document.getElementById('zt-install-steps-title');
+   var stepsList=document.getElementById('zt-install-steps-list');
+   var ios=/iPad|iPhone|iPod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+   var android=/Android/i.test(navigator.userAgent);
+   var safari=/Safari/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
+   var installPending=false,installComplete=false,waitTimer=0;
+   var instructions=ios
+    ?(safari?['Toque em Compartilhar no Safari.','Escolha Adicionar à Tela de Início e confirme.','Abra o Z-Link Talk pelo ícone criado.']:['Abra este endereço no Safari.','Toque em Compartilhar e depois em Adicionar à Tela de Início.','Abra o Z-Link Talk pelo novo ícone.'])
+    :(android?['No Chrome, abra o menu de três pontinhos (⋮).','Escolha Instalar aplicativo ou Adicionar à tela inicial.','Abra o Z-Link Talk pelo ícone criado.']:['No Chrome ou Edge, abra o menu do navegador.','Escolha Instalar Z-Link Talk ou use o ícone de instalação na barra de endereços.','Abra o Z-Link Talk pelo atalho criado.']);
+   function setSteps(){
+     stepsTitle.textContent=ios?'Instalação no iPhone ou iPad':android?'Instalação no Android':'Instalação no computador';
+     stepsList.replaceChildren();
+     instructions.forEach(function(t){var li=document.createElement('li');li.textContent=t;stepsList.appendChild(li);});
+     steps.hidden=false;
    }
-   btn.addEventListener('click',async function(){
-     var promptEvent=window.ZLINK_INSTALL_PROMPT;
-     if(!promptEvent){feedback.textContent=platformHelp();return;}
-     btn.disabled=true;
+   function showProgress(note){progress.hidden=false;progress.classList.remove('complete');progressNote.textContent=note;progress.setAttribute('aria-valuetext',note);}
+   function hideProgress(){progress.hidden=true;progress.classList.remove('complete');}
+   function refreshButton(){if(installPending||installComplete)return;buttonLabel.textContent=window.ZLINK_INSTALL_PROMPT?'Instalar agora':ios?'Instalar no iPhone':android?'Como instalar no Android':'Como instalar no computador';}
+   function installed(){
+     installComplete=true;installPending=false;clearTimeout(waitTimer);
+     progress.hidden=false;progress.classList.add('complete');
+     progress.setAttribute('aria-valuetext','Instalação concluída');
+     progressNote.textContent='Instalação concluída';
+     feedback.textContent='Pronto! Abra o Z-Link Talk Universal pelo novo ícone.';
+     buttonLabel.textContent='Aplicativo instalado';button.disabled=true;steps.hidden=true;
+   }
+   window.addEventListener('zlink-install-ready',refreshButton);
+   window.addEventListener('appinstalled',installed);
+   button.addEventListener('click',async function(){
+     if(installPending||installComplete)return;
+     var p=window.ZLINK_INSTALL_PROMPT;
+     if(!p){setSteps();feedback.textContent=ios?'Siga as instruções abaixo para adicionar o aplicativo à tela inicial.':'Use a opção de instalação do navegador conforme indicado abaixo.';return;}
+     // O diálogo precisa ser aberto diretamente pelo clique do usuário.
+     installPending=true;button.disabled=true;feedback.textContent='Confirme a instalação na janela do navegador.';
+     showProgress('Aguardando sua confirmação…');
      try{
-       await promptEvent.prompt();
-       var answer=await promptEvent.userChoice;
-       feedback.textContent=answer.outcome==='accepted'?'Instalação solicitada. Abra o app pelo novo ícone.':'Instalação cancelada. Você pode tentar pelo menu do navegador.';
-     }catch(e){feedback.textContent=platformHelp();}
-     finally{window.ZLINK_INSTALL_PROMPT=null;btn.disabled=false;}
+       await p.prompt();
+       var choice=await p.userChoice;
+       window.ZLINK_INSTALL_PROMPT=null;
+       if(installComplete)return;
+       if(choice.outcome==='accepted'){
+         feedback.textContent='Instalação solicitada. Aguarde a confirmação do navegador.';
+         progressNote.textContent='Finalizando no navegador…';progress.setAttribute('aria-valuetext','Aguardando conclusão pelo navegador');
+         waitTimer=setTimeout(function(){
+           if(installComplete)return;
+           hideProgress();feedback.textContent='Solicitação aceita. Verifique se o ícone do Z-Link Talk apareceu no aparelho.';
+           installPending=false;button.disabled=false;refreshButton();
+         },25000);
+       }else{
+         hideProgress();feedback.textContent='Instalação cancelada. Você pode tentar novamente pelo menu do navegador.';
+         installPending=false;button.disabled=false;setSteps();refreshButton();
+       }
+     }catch(error){
+       hideProgress();installPending=false;button.disabled=false;window.ZLINK_INSTALL_PROMPT=null;
+       setSteps();feedback.textContent='Use o menu do navegador para instalar o aplicativo.';refreshButton();
+     }
    });
-   window.addEventListener('appinstalled',function(){feedback.textContent='Aplicativo instalado. Abra pelo ícone do Z-Link Talk Universal.';btn.disabled=true;});
-   if(/iPad|iPhone|iPod/.test(navigator.userAgent)){btn.textContent='Como instalar no iPhone';}
+   if(ios){setSteps();}
+   else if(!window.ZLINK_INSTALL_PROMPT){
+     // A opção nativa pode aparecer depois que o navegador verificar a PWA.
+     window.addEventListener('load',function(){setTimeout(function(){if(!window.ZLINK_INSTALL_PROMPT&&!installPending&&!installComplete)setSteps();},1500);},{once:true});
+   }
+   refreshButton();
   }());
  </script>
- <script type="module" src="./app.js?v=5.8-login-menus-convite"></script>
+ <script type="module" src="./app.js?v=5.9-instalação-oficial"></script>
 </body></html>
