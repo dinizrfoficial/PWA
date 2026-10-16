@@ -244,7 +244,7 @@
    }
    function showProgress(note){progress.hidden=false;progress.classList.remove('complete');progressNote.textContent=note;progress.setAttribute('aria-valuetext',note);}
    function hideProgress(){progress.hidden=true;progress.classList.remove('complete');}
-   function refreshButton(){if(installPending||installComplete)return;buttonLabel.textContent=window.ZLINK_INSTALL_PROMPT?'Instalar agora':ios?'Instalar no iPhone':android?'Como instalar no Android':'Como instalar no computador';}
+   function refreshButton(){if(installPending||installComplete)return;buttonLabel.textContent='Instalar aplicativo';}
    function installed(){
      installComplete=true;installPending=false;clearTimeout(waitTimer);
      progress.hidden=false;progress.classList.add('complete');
@@ -253,7 +253,9 @@
      feedback.textContent='Pronto! Abra o Z-Link Talk Universal pelo novo ícone.';
      buttonLabel.textContent='Aplicativo instalado';button.disabled=true;steps.hidden=true;
    }
-   window.addEventListener('zlink-install-ready',refreshButton);
+   window.addEventListener('zlink-install-ready',function(){
+     if(!installPending&&!installComplete){steps.hidden=true;feedback.textContent='';refreshButton();}
+   });
    window.addEventListener('appinstalled',installed);
    button.addEventListener('click',async function(){
      if(installPending||installComplete)return;
@@ -284,13 +286,12 @@
        setSteps();feedback.textContent='Use o menu do navegador para instalar o aplicativo.';refreshButton();
      }
    });
-   if(ios){setSteps();}
-   else if(!window.ZLINK_INSTALL_PROMPT){
-     // A opção nativa pode aparecer depois que o navegador verificar a PWA.
-     window.addEventListener('load',function(){setTimeout(function(){if(!window.ZLINK_INSTALL_PROMPT&&!installPending&&!installComplete)setSteps();},1500);},{once:true});
-   }
+   // No Android e PC, a orientação manual só aparece se o usuário clicar
+   // e o navegador não disponibilizar beforeinstallprompt. No iOS, o fluxo
+   // Adicionar à Tela de Início exige uma ação manual no Safari.
+   if(ios)setSteps();
    refreshButton();
   }());
  </script>
- <script type="module" src="./app.js?v=5.9-instalação-oficial"></script>
+ <script type="module" src="./app.js?v=5.10-instalacao-direta"></script>
 </body></html>
