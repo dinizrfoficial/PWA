@@ -2,7 +2,7 @@
 // NUNCA coloque credenciais Admin, private keys, token mestre ou SMTP neste arquivo.
 window.ZLINK_WEB_CONFIG = Object.freeze({
   firebase: {
-    apiKey: 'AIzaSyCF_Au6p9reMH301EvbEL7rWZancHSvdl0',
+    apiKey: 'COLOQUE_A_WEB_API_KEY_DO_FIREBASE',
     authDomain: 'z-link-talk.firebaseapp.com',
     projectId: 'z-link-talk',
     appId: ''
