@@ -142,8 +142,11 @@
     <button class="primary" type="submit">CRIAR CANAL</button>
    </form>
   </section>
-  <section class="screen" id="ptt-screen"><div class="ptt-heading"><h2 id="ptt-title">Canal</h2><span id="ptt-availability">Conectando...</span><button id="audio-unlock" class="audio-unlock" type="button" aria-label="Ativar áudio" title="Ativar áudio">🔊</button></div>
-   <div class="ptt-channel-block"><span id="ptt-channel-avatar" class="avatar-circle" role="button" tabindex="0" aria-label="Opções do canal"></span><div class="grow"><small>CANAL ATUAL</small><strong id="ptt-channel-name">Canal</strong><span id="ptt-speaker">Aguardando transmissão</span></div><div class="connected-count"><small>CONECTADOS</small><b id="ptt-count">—</b><small id="ptt-type">PÚBLICO</small></div></div>
+  <section class="screen" id="ptt-screen"><div class="ptt-heading"><h2 id="ptt-title">Canal</h2><span id="ptt-availability">Conectando...</span><div id="ptt-other-tx" class="ptt-other-tx" role="button" tabindex="0" hidden>
+    <span class="other-tx-heading"><span class="other-tx-rf" aria-hidden="true"><i></i><i></i><i></i><i></i></span> OUTRO CANAL TRANSMITINDO</span>
+    <strong id="ptt-other-channel"></strong><small id="ptt-other-speaker"></small>
+   </div><button id="audio-unlock" class="audio-unlock" type="button" aria-label="Ativar áudio" title="Ativar áudio">🔊</button></div>
+   <div class="ptt-channel-block"><span id="ptt-channel-avatar" class="avatar-circle" role="button" tabindex="0" aria-label="Opções do canal"></span><div class="grow"><small>CANAL ATUAL</small><strong id="ptt-channel-name">Canal</strong><span id="ptt-speaker">Consultando usuários conectados…</span></div><div class="connected-count"><small>CONECTADOS</small><b id="ptt-count">—</b><small id="ptt-type">PÚBLICO</small></div></div>
    <div class="meter"><div class="meter-head"><b>▥ Nível de áudio</b><span id="meter-value">0%</span></div><div class="meter-bars" id="meter-bars"></div></div>
    <div class="timing-row"><div class="clock" id="ptt-clock">◷ 00:00.0</div><button class="last-msg" id="ptt-last">◌ Última mensagem</button></div>
    <div class="ptt-control"><button id="ptt-button" disabled aria-label="Segure para falar" title="Segure para falar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3" fill="currentColor" stroke="none"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><span id="ptt-note" hidden aria-hidden="true"></span></div>

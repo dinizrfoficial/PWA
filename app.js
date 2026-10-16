@@ -10,7 +10,7 @@ const escapeHTML = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;'
 const apiBase = String(cfg.apiBase || '').replace(/\/+$/, '');
 const validAvatar = (s) => typeof s === 'string' && (/^data:image\/(?:jpeg|jpg|webp|png);base64,[a-z0-9+/=\r\n]+$/i.test(s) || /^https:\/\/[^\s]+$/i.test(s));
 const avatarMarkup = (avatar, name) => validAvatar(avatar) ? `<img alt="" src="${escapeHTML(avatar)}">` : escapeHTML((name || '?').trim().charAt(0).toUpperCase());
-const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, replayActive:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
+const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, replayActive:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', rxTransmission:null, usersChannelId:null, webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
 let loginRoutingPromise=null;
 const lastMessage = new LocalLastMessage();
@@ -81,6 +81,7 @@ function updateTxUI(){
   button.disabled=!state.webAudioReady || !state.wsReady || !state.selected || state.txStopping;
   button.classList.toggle('transmitting',state.txGranted);
   $('tx-status').textContent=state.txGranted?'TRANSMITINDO':state.pendingTx?'Solicitando':'Pronto';
+  updateCrossChannelBanner();
 }
 function sendAmr(packet){
   // A funcao so recebe frames AMR-WB completos, nunca PCM.
@@ -154,8 +155,75 @@ function txGranted(data){
 }
 
 function toast(msg){const el=$('toast');el.textContent=String(msg);el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4300);}
-function status(msg){state.status=msg;$('connection').textContent=state.screen==='login'?'Z-Link Talk Universal':msg;$('ptt-availability').textContent=msg;}
-function screen(name){if(name!=='ptt'&&name!=='users'){audio.stopReplay();state.replayActive=false;updateReplayUI();}if(name!=='ptt'&&name!=='users'&&(state.holding||state.txGranted))stopTxNow();state.screen=name;$('connection').textContent=name==='login'?'Z-Link Talk Universal':state.status;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('active',el.id===`${name}-screen`));window.scrollTo({top:0,behavior:'instant'});if(name!=='ptt'&&name!=='users') sendWS({type:'channel_view_presence',channelId:null});if(name==='ptt' && state.selected)sendWS({type:'channel_view_presence',channelId:state.selected.id});}
+function status(msg){
+ state.status=msg;
+ $('connection').textContent=state.screen==='login'?'Z-Link Talk Universal':msg;
+ $('ptt-availability').textContent=msg;
+ updateCrossChannelBanner();
+}
+// Mesma contagem da lista de usuarios do servidor: todos os usuarios online
+// com o canal ativo, mesmo que estejam visualizando outro canal.
+function renderChannelPresence(){
+ const text=$('ptt-speaker'), count=$('ptt-count');
+ if(!text||!count||!state.selected)return;
+ const currentId=String(state.selected.id||'');
+ if(!state.wsReady||String(state.usersChannelId||'')!==currentId){
+  text.textContent=state.wsReady?'Consultando usuários conectados…':'Aguardando conexão';
+  count.textContent='—';
+  return;
+ }
+ const users=Array.isArray(state.users)?state.users:[];
+ const includesSelf=users.some(u=>String(u.id||u.uid||'')===String(state.user?.uid||''));
+ const total=Math.max(1,users.length+(includesSelf?0:1));
+ const others=Math.max(0,total-1);
+ text.textContent=others===0?'Apenas você está conectado':others===1?'Você e 1 usuário estão conectados':`Você e ${others} usuários estão conectados`;
+ count.textContent=String(total);
+}
+// O servidor informa o canal real do RX. Se for diferente do canal aberto,
+// o aviso aparece animado sobre o mesmo cabecalho, sem criar uma faixa extra.
+function updateCrossChannelBanner(){
+ const header=document.querySelector('#ptt-screen .ptt-heading');
+ const banner=$('ptt-other-tx');if(!header||!banner)return;
+ const rx=state.rxTransmission;
+ const cross=state.screen==='ptt'&&state.wsReady&&!state.txGranted&&!!rx&&
+  !!state.selected&&String(rx.channelId)!==String(state.selected.id);
+ header.classList.toggle('is-other-tx',cross);
+ banner.hidden=!cross;
+ if(!cross)return;
+ const match=state.channels.find(c=>String(c.id)===String(rx.channelId));
+ const channelName=rx.channelName||match?.name||`Canal ${rx.channelId}`;
+ $('ptt-other-channel').textContent=channelName;
+ $('ptt-other-speaker').textContent=`${rx.speaker||'Usuário'} transmitindo`;
+ banner.setAttribute('aria-label',`Outro canal transmitindo: ${channelName}. ${rx.speaker||'Usuário'}. Toque para abrir.`);
+}
+function openTransmittingChannel(){
+ const rx=state.rxTransmission;if(!rx)return;
+ const channel=state.channels.find(c=>String(c.id)===String(rx.channelId));
+ if(channel&&channel.enabled!==false&&!channel.blocked&&!channel.removed)openChannel(channel).catch(handleError);
+ else toast('O canal que está transmitindo não está disponível na sua lista.');
+}
+// Adapta o PTT as dimensoes REAIS do espaco restante, como na Activity Android.
+// ResizeObserver acompanha mudancas da janela, rotação, barra de navegacao e teclado.
+let pttResizeFrame=0;
+function resizePTT(){
+ const host=document.querySelector('#ptt-screen .ptt-control');
+ const button=$('ptt-button');
+ if(!host||!button||state.screen!=='ptt')return;
+ const width=host.clientWidth,height=host.clientHeight;
+ if(width<60||height<60)return;
+ const landscape=window.matchMedia('(orientation: landscape)').matches;
+ const gap=landscape?18:16;
+ const usableW=Math.max(0,width-gap),usableH=Math.max(0,height-gap);
+ let w,h;
+ if(landscape){const ratio=1.45;w=Math.min(usableW,usableH*ratio,620);h=w/ratio;}
+ else{w=Math.min(usableW,usableH,360);h=w;}
+ if(w<65||h<50)return;
+ button.style.setProperty('--ptt-computed-width',`${Math.floor(w)}px`);
+ button.style.setProperty('--ptt-computed-height',`${Math.floor(h)}px`);
+}
+function scheduleResizePTT(){cancelAnimationFrame(pttResizeFrame);pttResizeFrame=requestAnimationFrame(resizePTT);}
+
+function screen(name){if(name!=='ptt'&&name!=='users'){audio.stopReplay();state.replayActive=false;updateReplayUI();}if(name!=='ptt'&&name!=='users'&&(state.holding||state.txGranted))stopTxNow();state.screen=name;$('connection').textContent=name==='login'?'Z-Link Talk Universal':state.status;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('active',el.id===`${name}-screen`));window.scrollTo({top:0,behavior:'instant'});if(name==='ptt'){renderChannelPresence();scheduleResizePTT();}updateCrossChannelBanner();if(name!=='ptt'&&name!=='users') sendWS({type:'channel_view_presence',channelId:null});if(name==='ptt' && state.selected)sendWS({type:'channel_view_presence',channelId:state.selected.id});}
 // A PWA instalada usa uma unica URL. Interceptamos o Voltar do sistema para
 // navegar pelas telas sem que o navegador feche o aplicativo imediatamente.
 function showCloseGuidance(kind){
@@ -641,7 +709,7 @@ function startWS(){
  socket.onclose=e=>{
   if(state.ws!==socket||state.sessionEnded)return;
   state.ws=null;state.wsReady=false;
-  audio.abortEncoder();audio.stopRx();state.txGranted=false;state.pendingTx=false;state.webAudioReady=false;updateTxUI();
+  audio.abortEncoder();audio.stopRx();state.rxTransmission=null;state.usersChannelId=null;state.txGranted=false;state.pendingTx=false;state.webAudioReady=false;updateTxUI();renderChannelPresence();updateCrossChannelBanner();
   // O servidor usa 4001 ao substituir ou invalidar uma sessão.
   if(e.code===4001 || /session replaced|session invalid/i.test(e.reason||'')){
    endCurrentSession('Você entrou com outro dispositivo ou sua sessão foi encerrada.').catch(handleError);
@@ -675,22 +743,40 @@ async function checkCurrentSession(){
  }finally{state.checkingSession=false;}
 }
 function handleSignal(data){switch(data.type){
- case 'init':state.wsReady=true;status('Conectado');if(data.channels) {state.channels=data.channels;state.defaultChannelId=data.defaultChannelId;renderChannels();}state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Pronto para transmitir';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='Transmissão indisponível. Confira o áudio e tente novamente.';});updateTxUI();break;
+ case 'init':state.wsReady=true;status('Conectado');if(data.channels) {state.channels=data.channels;state.defaultChannelId=data.defaultChannelId;renderChannels();}state.users=data.clients||[];renderUsers();if(state.selected)sendWS({type:'select_channel',channelId:state.selected.id});sendWS({type:'sync_rx'});renderChannelPresence();updateCrossChannelBanner();audio.initEncoder().then(()=>{state.webAudioReady=true;updateTxUI();$('ptt-note').textContent='Pronto para transmitir';}).catch(e=>{state.webAudioReady=false;updateTxUI();$('ptt-note').textContent='Transmissão indisponível. Confira o áudio e tente novamente.';});updateTxUI();break;
  case 'tx_granted':txGranted(data);break;
- case 'channel_state':case 'channels_updated':case 'channels_state':if(Array.isArray(data.channels)){state.channels=data.channels;renderChannels();}break;
+ case 'channel_state':case 'channels_updated':case 'channels_state':
+  if(Array.isArray(data.channels)){state.channels=data.channels;renderChannels();updateCrossChannelBanner();}
+  // O servidor pode informar uma transmissão já ativa durante a reconexão.
+  // Não fabricamos um start_tx: aguardamos o evento de sincronização real.
+  break;
  case 'channel_selected':break;
- case 'user_list':case 'clients':state.users=data.clients||data.users||[];renderUsers();break;
+ case 'user_list':case 'clients':{
+  const channelId=String(data.channelId||'');
+  if(state.selected&&channelId===String(state.selected.id)){
+   state.users=Array.isArray(data.clients||data.users)?data.clients||data.users:[];
+   state.usersChannelId=channelId;
+   renderUsers();renderChannelPresence();
+  }
+  break;
+ }
  case 'start_tx':{
   if(!data.channelId)break;
   audio.stopReplay();state.replayActive=false;updateReplayUI();
   // A captura e local: um novo TX substitui imediatamente a ultima mensagem.
   lastMessage.begin(state.user?.uid,data.channelId,data.name||'Usuário');
-  state.txUser=data.name||'Usuário';$('ptt-speaker').textContent=state.txUser+' transmitindo';$('rx-status').textContent='Recebendo';state.lastRxAt=Date.now();
+  state.txUser=data.name||'Usuário';
+  state.rxTransmission={channelId:String(data.channelId),channelName:String(data.channelName||''),speaker:state.txUser,from:String(data.from||'')};
+  $('rx-status').textContent='Recebendo';state.lastRxAt=Date.now();
+  updateCrossChannelBanner();renderChannelPresence();
   audio.beginRx(data.channelId).catch(handleError);break;
  }
  case 'stop_tx':
   if(!data.channelId||String(data.channelId)===String(lastMessage.recording?.channelId))lastMessage.end();
-  if(!data.channelId||String(data.channelId)===String(audio.rxChannelId)){audio.stopRx();state.txUser='';$('ptt-speaker').textContent='Aguardando transmissão';$('rx-status').textContent='Aguardando';}
+  if(!data.channelId||String(data.channelId)===String(audio.rxChannelId)){
+   audio.stopRx();state.txUser='';state.rxTransmission=null;
+   $('rx-status').textContent='Aguardando';updateCrossChannelBanner();renderChannelPresence();
+  }
   break;
  case 'session_invalid':endCurrentSession('Sua sessão não está mais válida. Entre novamente para continuar.','Sessão encerrada').catch(handleError);break;
  case 'session_revoked':endCurrentSession(data.reason||'Você entrou com outro dispositivo.',data.code==='GLOBAL_BAN'||data.code==='PAYMENT_REQUIRED'?'Acesso encerrado':'Login em outro dispositivo').catch(handleError);break;
@@ -699,13 +785,18 @@ function handleSignal(data){switch(data.type){
  case 'channel_select_denied':toast(data.message||'Operação não permitida');break;
  case 'user_update':if(data.id===state.profile?.uid){state.profile.username=data.name||state.profile.username;state.profile.avatar=data.avatar||'';updateProfile();}break;
  }}
-async function openChannel(c){if(c.removed||c.blocked||c.enabled===false){toast('Este canal está indisponível. Confira suas opções.');return;}state.selected=c;updatePTT();screen('ptt');
+async function openChannel(c){if(c.removed||c.blocked||c.enabled===false){toast('Este canal está indisponível. Confira suas opções.');return;}state.selected=c;
+ // Lista de presenca recebida para outro canal nao deve ser reaproveitada.
+ state.users=[];state.usersChannelId=null;
+ updatePTT();screen('ptt');
  // A abertura ocorre a partir de um gesto do usuário: libera o áudio no iOS.
  audio.stopReplay();state.replayActive=false;updateReplayUI();
  audio.ensurePlayback().then(()=>setAudioReadyUI(true)).catch(e=>{setAudioReadyUI(false);$('ptt-note').textContent='Toque em 🔊 para habilitar a recepção de áudio.';console.warn('[WEB AUDIO]',e?.message);});
- audio.stopRx();updateTxUI();sendWS({type:'select_channel',channelId:c.id});sendWS({type:'sync_rx'});}
-function updatePTT(){const c=state.selected;if(!c)return;$('ptt-title').textContent=c.name;$('ptt-channel-name').textContent=c.name;$('ptt-channel-avatar').innerHTML=avatarMarkup(c.avatar,c.name);$('ptt-type').textContent=c.type==='private'?'PRIVADO':'PÚBLICO';$('ptt-count').textContent=state.users.filter(u=>u.isInChannel).length||'—';$('ptt-speaker').textContent=state.txUser?state.txUser+' transmitindo':'Aguardando transmissão';}
-function renderUsers(){const list=$('users-list');list.replaceChildren();const users=state.users||[];$('ptt-count').textContent=users.length||'—';if(!users.length){list.innerHTML='<p class="empty">Nenhum usuário informado pelo servidor.</p>';return;}for(const u of users){const row=document.createElement('div');row.className='channel-card';row.innerHTML=`<span class="avatar-circle">${avatarMarkup(u.avatar,u.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(u.name||'Usuário')}</span><span class="channel-id">${u.isOwner?'Administrador':u.isModerator?'Moderador':'Usuário'} ${u.isInChannel?'• Neste canal':''}</span></span>`;list.append(row);}}
+ // Se o RX ja e deste canal, nao interrompa a fala ao tocar no banner.
+ if(String(audio.rxChannelId||'')!==String(c.id))audio.stopRx();
+ updateTxUI();sendWS({type:'select_channel',channelId:c.id});sendWS({type:'sync_rx'});}
+function updatePTT(){const c=state.selected;if(!c)return;$('ptt-title').textContent=c.name;$('ptt-channel-name').textContent=c.name;$('ptt-channel-avatar').innerHTML=avatarMarkup(c.avatar,c.name);$('ptt-type').textContent=c.type==='private'?'PRIVADO':'PÚBLICO';renderChannelPresence();updateCrossChannelBanner();}
+function renderUsers(){const list=$('users-list');list.replaceChildren();const users=state.users||[];renderChannelPresence();if(!users.length){list.innerHTML='<p class="empty">Nenhum usuário informado pelo servidor.</p>';return;}for(const u of users){const row=document.createElement('div');row.className='channel-card';row.innerHTML=`<span class="avatar-circle">${avatarMarkup(u.avatar,u.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(u.name||'Usuário')}</span><span class="channel-id">${u.isOwner?'Administrador':u.isModerator?'Moderador':'Usuário'} ${u.isInChannel?'• Neste canal':''}</span></span>`;list.append(row);}}
 function channelMenu(channel){const c=state.channels.find(c=>c.id===channel.id)||channel;const owner=c.ownerUid===state.profile?.uid;const actions=[
  {label:'Entrar no canal',fn:()=>openChannel(c)},
  {label:'Informações do canal',fn:()=>infoChannel(c)},
@@ -722,7 +813,7 @@ async function removeChannel(c){if(!await confirmModal('Remover canal',`Remover 
 function profileMenu(){menu('Minha conta',[{label:'Trocar foto do perfil',fn:()=>chooseImage({type:'user'})},{label:'Alterar nome de usuário',fn:async()=>{const v=await promptModal('Alterar nome',[{label:'Novo nome',name:'username',value:state.profile?.username,maxLength:32,required:true}]);if(!v)return;await perform(async()=>{await api('/api/users/username',{method:'POST',body:v});state.profile.username=v.username;updateProfile();toast('Nome atualizado');});}},{label:'Minha Conta e Renovação',fn:openRenewal},{label:'Atualizar canais',fn:()=>perform(loadChannels)},{label:'Desconectar',danger:true,fn:confirmDisconnect}]);}
 async function logout(){
  stopConnection();state.sessionId='';state.sessionEnded=true;
- state.profile=null;state.channels=[];state.selected=null;state.users=[];
+ state.profile=null;state.channels=[];state.selected=null;state.users=[];state.rxTransmission=null;state.usersChannelId=null;
  try{if(state.auth)await firebaseSignOut(state.auth);}catch(e){console.warn('[SESSION] Sair:',e?.message);}
  state.user=null;status('Desconectado');screen('login');
 }
@@ -900,6 +991,14 @@ function wire(){
  $('create-avatar-button').onclick=()=>chooseImage({type:'create'});$('avatar-file').onchange=e=>perform(()=>saveImage(e.target.files?.[0]));
  $('create-form').onsubmit=e=>{e.preventDefault();perform(async()=>{const form=e.target;const name=$('create-name').value.trim();if(name.length<3)throw Error('Nome com pelo menos 3 caracteres');const data=await api('/api/channels/create',{method:'POST',body:{name,description:$('create-description').value.trim(),type:form.querySelector('input[name="type"]:checked').value,avatar:state.createAvatar}});await loadChannels();screen('channels');toast(`Canal ${data.channel?.name||name} criado!`);});};
  $('channel-search-btn').onclick=()=>perform(()=>searchChannels(false));$('channel-all-btn').onclick=()=>perform(()=>searchChannels(true));$('channel-add-id').onclick=()=>perform(()=>addChannel($('channel-id').value.trim()));
+ // Ajuste de tamanho sem acoplar a largura do PTT ao tipo de aparelho.
+ const pttHost=document.querySelector('#ptt-screen .ptt-control');
+ if(typeof ResizeObserver!=='undefined'&&pttHost){new ResizeObserver(scheduleResizePTT).observe(pttHost);}
+ window.addEventListener('resize',scheduleResizePTT,{passive:true});
+ window.addEventListener('orientationchange',scheduleResizePTT,{passive:true});
+ window.visualViewport?.addEventListener('resize',scheduleResizePTT,{passive:true});
+ $('ptt-other-tx').addEventListener('click',openTransmittingChannel);
+ $('ptt-other-tx').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTransmittingChannel();}});
  $('ptt-back').onclick=goBack;$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=pttScreenMenu;$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
  $('ptt-channel-avatar').onclick=()=>{if(state.selected)channelMenu(state.selected);};
  $('ptt-channel-avatar').onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&state.selected){e.preventDefault();channelMenu(state.selected);}};
@@ -935,7 +1034,7 @@ async function boot(){
      state.user=user;
      if(!user){
        state.registrationStatus=null;state.registrationRecovery=null;state.paymentRef='';state.selectedAccessPlan='';state.signupInProgress=false;
-       stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;
+       stopConnection();state.sessionId='';state.wsReady=false;state.profile=null;state.channels=[];state.selected=null;state.rxTransmission=null;state.usersChannelId=null;
        if(!state.sessionClosing)status('Desconectado');
        screen('login');return;
      }

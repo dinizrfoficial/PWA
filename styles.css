@@ -223,3 +223,46 @@ html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hi
   border-radius:clamp(17px,4.5dvh,28px);
  }
 }
+
+
+/* v5.7 — presenca no canal, aviso animado de RX multicanal e PTT adaptativo. */
+#ptt-screen .ptt-channel-block .grow #ptt-speaker{color:#b7d9f1;font-size:clamp(11px,1.85vmin,14px);font-weight:550;line-height:1.28}
+#ptt-screen .ptt-heading{position:relative;isolation:isolate;overflow:hidden}
+#ptt-screen .ptt-heading.is-other-tx>h2,#ptt-screen .ptt-heading.is-other-tx>#ptt-availability{visibility:hidden}
+#ptt-screen .ptt-other-tx[hidden]{display:none!important}
+#ptt-screen .ptt-other-tx{
+ position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:center;
+ align-items:center;gap:1px;min-width:0;padding:2px clamp(38px,7vw,68px);
+ border:1px solid #48b2e9;border-radius:inherit;cursor:pointer;
+ color:#ecf9ff;background:linear-gradient(110deg,#102a45,#183e5a 50%,#102a45);
+ box-shadow:inset 0 0 20px #0870a044;animation:other-tx-glow 1.6s ease-in-out infinite;
+}
+#ptt-screen .ptt-other-tx:focus-visible{outline:2px solid #bcf0ff;outline-offset:-3px}
+#ptt-screen .ptt-other-tx .other-tx-heading{font-size:clamp(9px,1.6dvh,11px);font-weight:800;letter-spacing:.35px;color:#74d7ff;display:flex;gap:5px;justify-content:center;align-items:center;white-space:nowrap}
+#ptt-screen .ptt-other-tx strong{display:block;max-width:100%;font-size:clamp(13px,2.8dvh,21px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ptt-screen .ptt-other-tx small{display:block;max-width:100%;font-size:clamp(10px,1.65dvh,12px);color:#b2d5e9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ptt-screen .other-tx-rf{height:13px;display:flex;gap:2px;align-items:center;justify-content:center;color:#57d8ff}
+#ptt-screen .other-tx-rf i{display:block;width:2px;height:4px;background:currentColor;border-radius:4px;animation:other-tx-wave .8s ease-in-out infinite alternate}
+#ptt-screen .other-tx-rf i:nth-child(2){height:10px;animation-delay:-.25s}
+#ptt-screen .other-tx-rf i:nth-child(3){height:13px;animation-delay:-.5s}
+#ptt-screen .other-tx-rf i:nth-child(4){height:7px;animation-delay:-.12s}
+@keyframes other-tx-glow{0%,100%{border-color:#34719d;box-shadow:inset 0 0 8px #1571a01f}50%{border-color:#67d7ff;box-shadow:inset 0 0 20px #34a9ed44}}
+@keyframes other-tx-wave{from{transform:scaleY(.4);opacity:.55}to{transform:scaleY(1.15);opacity:1}}
+@media(prefers-reduced-motion:reduce){#ptt-screen .ptt-other-tx,#ptt-screen .other-tx-rf i{animation:none}}
+/* Preenchimento exato do espaco restante medido; sem limites antigos de 31dvh/235px. */
+#ptt-screen .ptt-control button{
+ width:var(--ptt-computed-width,min(72vw,350px))!important;
+ height:var(--ptt-computed-height,min(72vw,350px))!important;
+ max-height:none!important;max-width:100%!important;
+ flex:0 0 auto;min-width:0;min-height:0;aspect-ratio:auto;
+}
+@media(orientation:portrait){#ptt-screen .ptt-control button{border-radius:50%}}
+@media(orientation:landscape){#ptt-screen .ptt-control button{border-radius:clamp(20px,5dvh,42px)}}
+@media(orientation:landscape) and (max-height:420px){
+ #ptt-screen .ptt-other-tx{padding-block:1px}
+ #ptt-screen .ptt-other-tx strong{font-size:clamp(12px,3.5dvh,17px)}
+ #ptt-screen .ptt-other-tx small{font-size:10px}
+}
+
+/* O botao de audio permanece acessivel mesmo durante o aviso animado. */
+#ptt-screen .ptt-heading .audio-unlock{z-index:3}
