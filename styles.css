@@ -196,3 +196,30 @@ html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hi
 .account-actions button{min-height:50px}
 .account-actions button:disabled{opacity:.52}
 @media(max-height:500px) and (orientation:landscape){#account-screen .account-scroll{padding-bottom:6px}.account-details{gap:9px}.account-section h3{margin-top:2px}}
+
+/* v5.5 — area PTT limpa e menu separado de opções administrativas. */
+#ptt-note{display:none!important}
+#ptt-channel-avatar{cursor:pointer}
+#ptt-channel-avatar:focus-visible{outline:2px solid #87d3ff;outline-offset:3px}
+/* Mesma proporcao aproximada de 222x126 do PTT horizontal Android.
+   Na vertical, permanece circular. */
+@media (orientation:landscape){
+ #ptt-screen .ptt-control button{
+  width:min(100%,62dvh,320px);
+  height:auto;
+  max-width:100%;
+  max-height:min(34dvh,180px);
+  aspect-ratio:222/126;
+  border-radius:clamp(19px,5dvh,38px);
+  padding:0;
+ }
+ #ptt-screen .ptt-control button svg{width:17%;height:auto}
+}
+@media (orientation:landscape) and (max-height:400px){
+ #ptt-screen .ptt-control button{
+  width:min(100%,60dvh,260px);
+  max-height:35dvh;
+  aspect-ratio:222/126;
+  border-radius:clamp(17px,4.5dvh,28px);
+ }
+}

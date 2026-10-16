@@ -183,6 +183,44 @@ function showExitOptions(){
   area.append(box);
  });
 }
+// Menu exclusivo da tela PTT. O menu administrativo dos canais continua
+// disponivel na lista e no avatar do canal.
+function pttScreenMenu(){
+ menu('Opções do aplicativo',[
+  {label:'Minimizar',fn:()=>showCloseGuidance('min')},
+  {label:'Fechar completamente',danger:true,fn:()=>confirmCloseApp()}
+ ]);
+}
+async function confirmCloseApp(){
+ const accepted=await confirmModal(
+  'Fechar completamente',
+  'Deseja encerrar a conexão com o canal e parar o PTT neste dispositivo? O acesso à conta será mantido. Para fechar a janela da PWA, utilize o controle do seu aparelho.',
+  'ENCERRAR CONEXÃO'
+ );
+ if(!accepted)return;
+ // PWA nao tem permissao universal para fechar a propria janela.
+ // Interrompe de verdade o audio, o WebSocket e suas reconexoes.
+ state.sessionEnded=true;
+ stopConnection();
+ state.sessionId='';
+ state.replayActive=false;
+ updateReplayUI();
+ status('Comunicação encerrada');
+ const platform=/iPad|iPhone|iPod/i.test(navigator.userAgent)?'iPhone':/Android/i.test(navigator.userAgent)?'Android':'PC';
+ const instruction=platform==='iPhone'
+  ?'Abra o seletor de aplicativos e feche a janela do Z-Link Talk.'
+  :platform==='Android'
+   ?'Abra os aplicativos recentes e deslize o Z-Link Talk para fechar a janela.'
+   :'Feche a janela pelo botão X do sistema.';
+ modal('Comunicação encerrada',area=>{
+  const box=document.createElement('div');box.className='modal-stack';
+  const msg=document.createElement('p');msg.textContent='A transmissão, a recepção e a conexão com o canal foram interrompidas.';
+  const help=document.createElement('p');help.textContent=instruction;
+  const again=document.createElement('button');again.className='primary';again.textContent='ABRIR NOVAMENTE';
+  again.onclick=()=>location.reload();
+  box.append(msg,help,again);area.append(box);
+ });
+}
 function goBack(){
  // Primeiro fecha o menu/diálogo atual, como no Android.
  if(!$('modal').hidden){closeModal();return;}
@@ -849,7 +887,9 @@ function wire(){
  $('create-avatar-button').onclick=()=>chooseImage({type:'create'});$('avatar-file').onchange=e=>perform(()=>saveImage(e.target.files?.[0]));
  $('create-form').onsubmit=e=>{e.preventDefault();perform(async()=>{const form=e.target;const name=$('create-name').value.trim();if(name.length<3)throw Error('Nome com pelo menos 3 caracteres');const data=await api('/api/channels/create',{method:'POST',body:{name,description:$('create-description').value.trim(),type:form.querySelector('input[name="type"]:checked').value,avatar:state.createAvatar}});await loadChannels();screen('channels');toast(`Canal ${data.channel?.name||name} criado!`);});};
  $('channel-search-btn').onclick=()=>perform(()=>searchChannels(false));$('channel-all-btn').onclick=()=>perform(()=>searchChannels(true));$('channel-add-id').onclick=()=>perform(()=>addChannel($('channel-id').value.trim()));
- $('ptt-back').onclick=goBack;$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=()=>{if(state.selected)channelMenu(state.selected);};$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
+ $('ptt-back').onclick=goBack;$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=pttScreenMenu;$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
+ $('ptt-channel-avatar').onclick=()=>{if(state.selected)channelMenu(state.selected);};
+ $('ptt-channel-avatar').onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&state.selected){e.preventDefault();channelMenu(state.selected);}};
  const ptt=$('ptt-button');ptt.style.touchAction='none';
  ptt.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();ptt.setPointerCapture?.(e.pointerId);beginTx().catch(handleError);});
  for(const evt of ['pointerup','pointercancel','lostpointercapture'])ptt.addEventListener(evt,()=>stopTxNow());
