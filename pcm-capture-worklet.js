@@ -1,7 +1,7 @@
 /* WebAudio AudioWorklet: 128-sample input blocks -> mono PCM s16le 16kHz 20ms.
  * No network call here. Worklet never stores credentials or mic recordings. */
 class ZLinkPcmCapture extends AudioWorkletProcessor {
- constructor(){super();this.phase=0;this.pos=0;this.frame=new Int16Array(320);this.last=0;}
+ constructor(){super();this.phase=0;this.pos=0;this.frame=new Int16Array(320);this.last=0;this.vuFrames=0;}
  process(inputs,outputs){
    for(const output of outputs)for(const ch of output)ch.fill(0);
    const input=inputs[0]?.[0];if(!input)return true;
@@ -15,6 +15,7 @@ class ZLinkPcmCapture extends AudioWorkletProcessor {
        const v=(sample+this.last)*0.5;
        this.frame[this.pos++]=Math.round(v<0?v*32768:v*32767);
        if(this.pos===320){
+         if((++this.vuFrames % 4)===0){let total=0;for(const x of this.frame){const v=x/32768;total+=v*v;}this.port.postMessage({type:'vu',rms:Math.sqrt(total/320)});}
          const bytes=this.frame.buffer.slice(0);this.port.postMessage(bytes,[bytes]);
          this.frame=new Int16Array(320);this.pos=0;
        }

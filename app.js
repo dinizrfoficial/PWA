@@ -1,5 +1,6 @@
 // Z-Link Talk Web — PTT RX AMR-WB + TX AMR-WB codificado no navegador.
 import { ZLinkWebAudio } from './audio.js';
+import { LocalLastMessage } from './last-message.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, sendPasswordResetEmail, onAuthStateChanged, signOut as firebaseSignOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
@@ -9,14 +10,44 @@ const escapeHTML = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;'
 const apiBase = String(cfg.apiBase || '').replace(/\/+$/, '');
 const validAvatar = (s) => typeof s === 'string' && (/^data:image\/(?:jpeg|jpg|webp|png);base64,[a-z0-9+/=\r\n]+$/i.test(s) || /^https:\/\/[^\s]+$/i.test(s));
 const avatarMarkup = (avatar, name) => validAvatar(avatar) ? `<img alt="" src="${escapeHTML(avatar)}">` : escapeHTML((name || '?').trim().charAt(0).toUpperCase());
-const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
+const state = { user:null, auth:null, profile:null, channels:[], selected:null, users:[], ws:null, wsReady:false, sessionId:'', reconnect:null, sessionEnded:false, sessionClosing:false, checkingSession:false, replayActive:false, screen:'login', signupInProgress:false, registrationRecovery:null, registrationStatus:null, registrationPolicy:null, selectedAccessPlan:'', paymentRef:'', defaultChannelId:null, createAvatar:'', uploadTarget:null, deviceId:'', status:'Aguardando conexão', lastRxAt:0, txUser:'', webAudioReady:false, holding:false, pendingTx:false, txGranted:false, txStopping:false, txStopTimer:null, txStartAt:0, txClock:null };
 let toastTimer=null, authInitialized=false, modalResolver=null, queryOffset=0, lastSearchQuery='', queryHasMore=false;
 let loginRoutingPromise=null;
+const lastMessage = new LocalLastMessage();
 const audio = new ZLinkWebAudio({
  onStatus: message=>{console.warn('[WEB AUDIO]',message);if($('ptt-note'))$('ptt-note').textContent=message;},
- onMeter: value=>{if($('meter-value'))$('meter-value').textContent=value+'%';
-   const bars=$('meter-bars')?.querySelectorAll('i');bars?.forEach((b,i)=>{b.style.opacity=i<(value*bars.length/100)?'1':'.25';});}
+ onMeter: value=>{const level=Math.max(0,Math.min(100,Number(value)||0));if($('meter-value'))$('meter-value').textContent=Math.round(level)+'%';
+   const bars=$('meter-bars')?.querySelectorAll('i');bars?.forEach((b,i)=>{b.classList.toggle('on', i < Math.ceil(level * bars.length / 100));});}
 });
+function setAudioReadyUI(ok){
+ const b=$('audio-unlock');if(!b)return;
+ b.textContent=ok?'🔊':'🔇';
+ b.setAttribute('aria-label',ok?'Áudio habilitado':'Ativar áudio');
+ b.title=ok?'Som habilitado':'Ativar áudio';
+ b.classList.toggle('needs-unlock',!ok);
+}
+function updateReplayUI(){
+ const b=$('ptt-last');if(!b)return;
+ b.textContent=state.replayActive?'■ Parar última mensagem':'◌ Última mensagem';
+ b.setAttribute('aria-pressed',String(!!state.replayActive));
+}
+async function playLastMessage(){
+ if(!state.selected || !state.user)return;
+ if(state.replayActive){audio.stopReplay();state.replayActive=false;updateReplayUI();return;}
+ if(state.holding||state.pendingTx||state.txGranted||state.txStopping||audio.rxChannelId){toast('Aguarde o fim da transmissão para ouvir a última mensagem.');return;}
+ const playback=audio.ensurePlayback(); // gesto do usuário: desbloqueio de áudio no iOS
+ const entry=await lastMessage.read(state.user.uid,state.selected.id);
+ if(!entry?.packets?.length){playback.catch(()=>{});toast('Não existe última mensagem recebida neste canal por este dispositivo.');return;}
+ await playback;
+ if(audio.rxChannelId){toast('Uma transmissão começou. Aguarde para ouvir a gravação.');return;}
+ state.replayActive=true;updateReplayUI();
+ $('ptt-note').textContent='Reproduzindo última mensagem de '+(entry.sender||'Usuário');
+ try{await audio.replayPackets(entry.packets);}
+ finally{
+  state.replayActive=false;updateReplayUI();
+  if(state.screen==='ptt')$('ptt-note').textContent='Segure o PTT para falar';
+ }
+}
 function updateTxUI(){
   const button=$('ptt-button');if(!button)return;
   button.disabled=!state.webAudioReady || !state.wsReady || !state.selected || state.txStopping;
@@ -59,7 +90,7 @@ function finishTx(){
   updateTxUI();
 }
 async function beginTx(){
-  if(!state.webAudioReady||!state.wsReady||!state.selected||state.holding||state.pendingTx||state.txStopping)return;
+  if(!state.webAudioReady||!state.wsReady||!state.selected||state.holding||state.pendingTx||state.txStopping||state.replayActive)return;
   state.holding=true;state.pendingTx=true;updateTxUI();
   try{
     await audio.prepareCapture(sendAmr);
@@ -96,7 +127,7 @@ function txGranted(data){
 
 function toast(msg){const el=$('toast');el.textContent=String(msg);el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),4300);}
 function status(msg){state.status=msg;$('connection').textContent=state.screen==='login'?'Z-Link Talk Universal':msg;$('ptt-availability').textContent=msg;}
-function screen(name){if(name!=='ptt'&&name!=='users'&&(state.holding||state.txGranted))stopTxNow();state.screen=name;$('connection').textContent=name==='login'?'Z-Link Talk Universal':state.status;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('active',el.id===`${name}-screen`));window.scrollTo({top:0,behavior:'instant'});if(name!=='ptt'&&name!=='users') sendWS({type:'channel_view_presence',channelId:null});if(name==='ptt' && state.selected)sendWS({type:'channel_view_presence',channelId:state.selected.id});}
+function screen(name){if(name!=='ptt'&&name!=='users'){audio.stopReplay();state.replayActive=false;updateReplayUI();}if(name!=='ptt'&&name!=='users'&&(state.holding||state.txGranted))stopTxNow();state.screen=name;$('connection').textContent=name==='login'?'Z-Link Talk Universal':state.status;document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('active',el.id===`${name}-screen`));window.scrollTo({top:0,behavior:'instant'});if(name!=='ptt'&&name!=='users') sendWS({type:'channel_view_presence',channelId:null});if(name==='ptt' && state.selected)sendWS({type:'channel_view_presence',channelId:state.selected.id});}
 function closeModal(){ $('modal').hidden=true;$('modal-content').replaceChildren();const r=modalResolver;modalResolver=null;if(r)r(false); }
 function modal(title,render){closeModal();$('modal-title').textContent=title;const area=$('modal-content');if(typeof render==='string')area.innerHTML=render;else render(area);$('modal').hidden=false;}
 function menu(title,entries){modal(title,area=>{const list=document.createElement('div');list.className='modal-menu';for(const entry of entries){const btn=document.createElement('button');btn.textContent=entry.label;if(entry.danger)btn.classList.add('danger');btn.onclick=()=>{closeModal();Promise.resolve().then(entry.fn).catch(handleError)};list.appendChild(btn);}area.append(list);});}
@@ -224,8 +255,17 @@ async function routeRegistrationStatus(s){
   await finalizePending(s);return;
  }
  if(s.active){
-  if(s.accessExpired||s.contributionRequired){await showContributions(s);return;}
-  await initAccount();return;
+  // A obrigacao historica de contribuicao pode permanecer no perfil mesmo
+  // durante um periodo pago valido. O estado calculado pelo servidor e a fonte
+  // autoritativa; nao bloquear apenas por contributionRequired.
+  const access=await api('/api/access/status');
+  if(access.active===true && access.code==='ACCESS_ACTIVE'){
+   await initAccount();return;
+  }
+  if(access.active===false || access.code==='PAYMENT_REQUIRED'){
+   await showContributions({...s,accessExpired:true});return;
+  }
+  throw Error('Nao foi possivel confirmar a situacao da sua conta. Tente novamente.');
  }
  // Não tornar uma conta incompleta elegível a entrar no PTT.
  screen('login');registrationMessage('login-message','Esta conta não possui cadastro finalizado. Consulte o suporte para recuperar seu cadastro.');
@@ -342,13 +382,13 @@ async function checkContribution(){
   if(s.pending&&s.paymentStatus==='approved'){
    await finalizePending(s);toast('Conta ativada!');return;
   }
-  if(!s.pending&&s.active&&!s.accessExpired){await initAccount();return;}
+  if(!s.pending&&s.active){await routeRegistrationStatus(s);return;}
   if(state.paymentRef){
    const payment=await api(`/api/access/payment/status?paymentRef=${encodeURIComponent(state.paymentRef)}`);
    if(payment.approved){
     s=await api('/api/pending-registration/status');
     if(s.pending&&s.paymentStatus==='approved'){await finalizePending(s);toast('Conta ativada!');return;}
-    if(!s.pending&&s.active&&!s.accessExpired){await initAccount();return;}
+    if(!s.pending&&s.active){await routeRegistrationStatus(s);return;}
    }
   }
   if(s.pending&&s.paymentRequired){
@@ -368,7 +408,7 @@ async function openSession(force=false){
 }
 function stopConnection(){
  if(state.txGranted)sendWS({type:'stop_tx'});
- audio.abortEncoder();audio.stopRx();clearInterval(state.txClock);clearTimeout(state.txStopTimer);
+ audio.abortEncoder();audio.stopReplay();audio.stopRx();clearInterval(state.txClock);clearTimeout(state.txStopTimer);
  state.holding=false;state.pendingTx=false;state.txGranted=false;state.txStopping=false;state.webAudioReady=false;
  updateTxUI();
  clearTimeout(state.reconnect);state.reconnect=null;state.wsReady=false;
@@ -452,7 +492,10 @@ function startWS(){
  };
  socket.onmessage=e=>{
   if(state.sessionEnded)return;
-  if(e.data instanceof ArrayBuffer){audio.feedPacket(e.data);return;}
+  if(e.data instanceof ArrayBuffer){
+   if(audio.rxChannelId && lastMessage.recording?.channelId===String(audio.rxChannelId))lastMessage.append(e.data);
+   audio.feedPacket(e.data);return;
+  }
   if(typeof e.data!=='string')return;
   let data;try{data=JSON.parse(e.data);}catch{return;}
   handleSignal(data);
@@ -499,8 +542,18 @@ function handleSignal(data){switch(data.type){
  case 'channel_state':case 'channels_updated':case 'channels_state':if(Array.isArray(data.channels)){state.channels=data.channels;renderChannels();}break;
  case 'channel_selected':break;
  case 'user_list':case 'clients':state.users=data.clients||data.users||[];renderUsers();break;
- case 'start_tx':{state.txUser=data.name||'Usuário';$('ptt-speaker').textContent=state.txUser+' transmitindo';$('rx-status').textContent='Recebendo AMR-WB';state.lastRxAt=Date.now();audio.beginRx(data.channelId).catch(handleError);break;}
- case 'stop_tx':if(!data.channelId||String(data.channelId)===String(audio.rxChannelId)){audio.stopRx();state.txUser='';$('ptt-speaker').textContent='Aguardando transmissão';$('rx-status').textContent='Aguardando';}break;
+ case 'start_tx':{
+  if(!data.channelId)break;
+  audio.stopReplay();state.replayActive=false;updateReplayUI();
+  // A captura e local: um novo TX substitui imediatamente a ultima mensagem.
+  lastMessage.begin(state.user?.uid,data.channelId,data.name||'Usuário');
+  state.txUser=data.name||'Usuário';$('ptt-speaker').textContent=state.txUser+' transmitindo';$('rx-status').textContent='Recebendo AMR-WB';state.lastRxAt=Date.now();
+  audio.beginRx(data.channelId).catch(handleError);break;
+ }
+ case 'stop_tx':
+  if(!data.channelId||String(data.channelId)===String(lastMessage.recording?.channelId))lastMessage.end();
+  if(!data.channelId||String(data.channelId)===String(audio.rxChannelId)){audio.stopRx();state.txUser='';$('ptt-speaker').textContent='Aguardando transmissão';$('rx-status').textContent='Aguardando';}
+  break;
  case 'session_invalid':endCurrentSession('Sua sessão não está mais válida. Entre novamente para continuar.','Sessão encerrada').catch(handleError);break;
  case 'session_revoked':endCurrentSession(data.reason||'Você entrou com outro dispositivo.',data.code==='GLOBAL_BAN'||data.code==='PAYMENT_REQUIRED'?'Acesso encerrado':'Login em outro dispositivo').catch(handleError);break;
  case 'channel_removed':toast(data.message||'Canal removido');loadChannels().catch(handleError);break;
@@ -510,7 +563,8 @@ function handleSignal(data){switch(data.type){
  }}
 async function openChannel(c){if(c.removed||c.blocked||c.enabled===false){toast('Este canal está indisponível. Confira suas opções.');return;}state.selected=c;updatePTT();screen('ptt');
  // A abertura ocorre a partir de um gesto do usuário: libera o áudio no iOS.
- audio.ensurePlayback().then(()=>{$('audio-unlock').textContent='🔊 Som habilitado';}).catch(()=>{});
+ audio.stopReplay();state.replayActive=false;updateReplayUI();
+ audio.ensurePlayback().then(()=>setAudioReadyUI(true)).catch(e=>{setAudioReadyUI(false);$('ptt-note').textContent='Toque em 🔊 para habilitar a recepção de áudio.';console.warn('[WEB AUDIO]',e?.message);});
  audio.stopRx();updateTxUI();sendWS({type:'select_channel',channelId:c.id});sendWS({type:'sync_rx'});}
 function updatePTT(){const c=state.selected;if(!c)return;$('ptt-title').textContent=c.name;$('ptt-channel-name').textContent=c.name;$('ptt-channel-avatar').innerHTML=avatarMarkup(c.avatar,c.name);$('ptt-type').textContent=c.type==='private'?'PRIVADO':'PÚBLICO';$('ptt-count').textContent=state.users.filter(u=>u.isInChannel).length||'—';$('ptt-speaker').textContent=state.txUser?state.txUser+' transmitindo':'Aguardando transmissão';}
 function renderUsers(){const list=$('users-list');list.replaceChildren();const users=state.users||[];$('ptt-count').textContent=users.length||'—';if(!users.length){list.innerHTML='<p class="empty">Nenhum usuário informado pelo servidor.</p>';return;}for(const u of users){const row=document.createElement('div');row.className='channel-card';row.innerHTML=`<span class="avatar-circle">${avatarMarkup(u.avatar,u.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(u.name||'Usuário')}</span><span class="channel-id">${u.isOwner?'Administrador':u.isModerator?'Moderador':'Usuário'} ${u.isInChannel?'• Neste canal':''}</span></span>`;list.append(row);}}
@@ -587,7 +641,7 @@ function wire(){
  $('create-avatar-button').onclick=()=>chooseImage({type:'create'});$('avatar-file').onchange=e=>perform(()=>saveImage(e.target.files?.[0]));
  $('create-form').onsubmit=e=>{e.preventDefault();perform(async()=>{const form=e.target;const name=$('create-name').value.trim();if(name.length<3)throw Error('Nome com pelo menos 3 caracteres');const data=await api('/api/channels/create',{method:'POST',body:{name,description:$('create-description').value.trim(),type:form.querySelector('input[name="type"]:checked').value,avatar:state.createAvatar}});await loadChannels();screen('channels');toast(`Canal ${data.channel?.name||name} criado!`);});};
  $('channel-search-btn').onclick=()=>perform(()=>searchChannels(false));$('channel-all-btn').onclick=()=>perform(()=>searchChannels(true));$('channel-add-id').onclick=()=>perform(()=>addChannel($('channel-id').value.trim()));
- $('ptt-back').onclick=()=>screen('channels');$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=()=>{if(state.selected)channelMenu(state.selected);};$('ptt-last').onclick=()=>toast('Reprodução de última mensagem será integrada na etapa de áudio Web.');
+ $('ptt-back').onclick=()=>screen('channels');$('ptt-users').onclick=()=>{renderUsers();screen('users');};$('ptt-more').onclick=()=>{if(state.selected)channelMenu(state.selected);};$('ptt-last').onclick=()=>playLastMessage().catch(handleError);
  const ptt=$('ptt-button');ptt.style.touchAction='none';
  ptt.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();ptt.setPointerCapture?.(e.pointerId);beginTx().catch(handleError);});
  for(const evt of ['pointerup','pointercancel','lostpointercapture'])ptt.addEventListener(evt,()=>stopTxNow());
@@ -595,7 +649,7 @@ function wire(){
  // Teclado físico: barra de espaço mantém TX apenas enquanto pressionada.
  document.addEventListener('keydown',e=>{if(e.code==='Space'&&state.screen==='ptt'&&!e.repeat&& !['INPUT','TEXTAREA','BUTTON'].includes(document.activeElement?.tagName)){e.preventDefault();beginTx().catch(handleError);}});
  document.addEventListener('keyup',e=>{if(e.code==='Space'&&state.holding){e.preventDefault();stopTxNow();}});
- $('audio-unlock').onclick=()=>audio.ensurePlayback().then(()=>{$('audio-unlock').textContent='🔊 Som habilitado';toast('Áudio ativado');sendWS({type:'sync_rx'});}).catch(handleError);
+ $('audio-unlock').onclick=()=>audio.ensurePlayback().then(()=>{setAudioReadyUI(true);toast('Áudio habilitado');sendWS({type:'sync_rx'});}).catch(handleError);
 
  document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.holding||state.txGranted)stopTxNow();status(state.wsReady?'Segundo plano — áudio pode ser suspenso':'Segundo plano');}else{if(state.wsReady)status('Conectado');if(state.screen==='verify')checkEmailVerification().catch(()=>{});else if(state.screen==='contribution')checkContribution().catch(()=>{});else checkCurrentSession().catch(handleError);}});
  window.addEventListener('online',async()=>{await checkCurrentSession().catch(handleError);if(state.sessionId&&!state.sessionEnded&&!state.wsReady)startWS();});
