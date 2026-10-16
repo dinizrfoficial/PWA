@@ -1,4 +1,4 @@
-const CACHE='zlinktalk-web-shell-v4-registration-20261015';
+const CACHE='zlinktalk-web-shell-v4b-installed-ui-20261016';
 const SHELL=['./','./index.html','./styles.css','./app.js','./audio.js','./amrwb-panel-decoder.js','./zlink-pcm-worklet.js','./amrwb-encode-worker.js','./pcm-capture-worklet.js','./config.js','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
