@@ -1,0 +1,197 @@
+name: Compilar AMR-WB local da PWA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/compilar-amrwb.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  codec:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Baixar o repositorio PWA
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Configurar Node.js para os testes
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar compilador WebAssembly
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '5.0.1'
+
+      - name: Verificar compilador e arquivos da PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          emcc --version | head -n 1
+          test -s amrwb-encode-worker.js
+          test -s amrwb-panel-decoder.js
+          test -s audio.js
+          test -s sw.js
+          node --check amrwb-encode-worker.js
+          node --check audio.js
+
+      - name: Baixar fontes VisualOn sob licença Apache-2.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 https://github.com/mstorsjo/vo-amrwbenc.git "$RUNNER_TEMP/vo-amrwbenc"
+          echo "VO_SOURCE=$RUNNER_TEMP/vo-amrwbenc" >> "$GITHUB_ENV"
+          mkdir -p codec/src
+          cp "$RUNNER_TEMP/vo-amrwbenc/COPYING" codec/LICENSE-visualon.txt
+          printf 'Fonte VisualOn (Apache-2.0): https://github.com/mstorsjo/vo-amrwbenc\nCommit: %s\n' "$(git -C "$RUNNER_TEMP/vo-amrwbenc" rev-parse HEAD)" > codec/BUILD-INFO.txt
+
+      - name: Compilar encoder AMR-WB WebAssembly no GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$VO_SOURCE" "$RUNNER_TEMP/sources.txt" <<'PY'
+          import sys,re
+          from pathlib import Path
+          root,output=Path(sys.argv[1]),Path(sys.argv[2])
+          raw=(root/'Makefile.am').read_text()
+          match=re.search(r'^libvo_amrwbenc_la_SOURCES\s*=\s*(.*?)(?=^if ARMV7NEON\s*$)',raw,re.M|re.S)
+          if not match:
+              raise SystemExit('A lista de fontes VisualOn mudou: revisao necessaria')
+          sources=[]
+          for t in match.group(1).replace('\\',' ').split():
+              t=t.replace('$(VO_COMMON)','common').replace('$(ENC_SRC)','amrwbenc/src')
+              p=(root/t).resolve()
+              if not p.is_file() or p.suffix!='.c':
+                  raise SystemExit('Fonte VisualOn ausente ou inesperada: '+str(p))
+              sources.append(str(p))
+          if len(sources)<40:
+              raise SystemExit(f'Somente {len(sources)} unidades C encontradas')
+          output.write_text('\n'.join(sources)+'\n')
+          print(f'Compilando {len(sources)} arquivos C da biblioteca VisualOn')
+          PY
+          mapfile -t SOURCES < "$RUNNER_TEMP/sources.txt"
+          emcc -O2 -std=gnu99 \
+            -I"$VO_SOURCE/amrwbenc/inc" \
+            -I"$VO_SOURCE/common/include" \
+            -I"$VO_SOURCE" \
+            "${SOURCES[@]}" \
+            -sWASM=1 \
+            -sMODULARIZE=1 \
+            -sEXPORT_NAME=ZLinkEncoderModule \
+            -sENVIRONMENT=web,worker,node \
+            -sFILESYSTEM=0 \
+            -sALLOW_MEMORY_GROWTH=1 \
+            '-sEXPORTED_FUNCTIONS=["_E_IF_init","_E_IF_encode","_E_IF_exit","_malloc","_free"]' \
+            '-sEXPORTED_RUNTIME_METHODS=["HEAPU8","HEAP16"]' \
+            -o codec/amrwb-encoder.js
+          test -s codec/amrwb-encoder.js
+          test -s codec/amrwb-encoder.wasm
+          node --check codec/amrwb-encoder.js
+
+      - name: Testar codificacao real de voz e protocolo ZL
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs=require('fs');
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const makeEncoder=require('./codec/amrwb-encoder.js');
+            assert.equal(typeof makeEncoder,'function','Fabrica de encoder ausente');
+            const mod=await makeEncoder({wasmBinary:fs.readFileSync('./codec/amrwb-encoder.wasm')});
+            for(const name of ['_E_IF_init','_E_IF_encode','_E_IF_exit','_malloc','_free'])
+              assert.equal(typeof mod[name],'function',`Funcao ${name} indisponivel`);
+            assert.ok(mod.HEAP16 && mod.HEAPU8,'Views da memoria nao exportadas');
+            const state=mod._E_IF_init();
+            const inp=mod._malloc(640),out=mod._malloc(128);
+            assert.ok(state && inp && out,'Memoria do codec nao iniciada');
+            let frameCount=0;
+            for(let f=0;f<12;f++){
+              const pcm=new Int16Array(320);
+              for(let i=0;i<320;i++){
+                const t=(f*320+i)/16000;
+                pcm[i]=Math.round(12000*Math.sin(2*Math.PI*450*t));
+              }
+              mod.HEAP16.set(pcm,inp>>1);
+              const n=mod._E_IF_encode(state,8,inp,out,0);
+              assert.equal(n,61,`Quadro ${f} nao gerou 61 bytes (${n})`);
+              const raw=Uint8Array.from(mod.HEAPU8.subarray(out,out+n));
+              assert.equal((raw[0]>>3)&15,8,'Modo esperado AMR-WB 23,85 kbps');
+              const packet=new Uint8Array(6+raw.length);
+              packet.set([0x5a,0x4c,1,1,(f>>>8)&255,f&255]);packet.set(raw,6);
+              assert.equal(packet.length,67,'Pacote ZL deve ter 67 bytes');
+              frameCount++;
+            }
+            mod._E_IF_exit(state);mod._free(inp);mod._free(out);
+            console.log(`VALIDADO: ${frameCount} quadros AMR-WB reais, modo 8, 67 bytes/pacote ZL`);
+          })().catch(err=>{console.error(err);process.exitCode=1});
+          JS
+
+      - name: Copiar decodificador existente do painel para a PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --max-time 45 \
+            https://servidor.zlinktalk.com.br/panel-codec/decode-amr.js \
+            -o codec/decode-amr.js
+          curl -fLsS --retry 3 --max-time 45 \
+            https://servidor.zlinktalk.com.br/panel-codec/src/amr.wasm.js \
+            -o codec/src/amr.wasm.js
+          test "$(wc -c <codec/decode-amr.js)" -gt 1000
+          test "$(wc -c <codec/src/amr.wasm.js)" -gt 1000
+          if head -c 256 codec/decode-amr.js | grep -qi '<html'; then
+            echo 'Erro: recebemos HTML em vez do decoder do painel'; exit 1
+          fi
+          node --check codec/decode-amr.js
+          node --check codec/src/amr.wasm.js
+
+      - name: Atualizar cache da PWA para instalar os codecs offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('sw.js')
+          original=p.read_text(encoding='utf-8')
+          updated,n=re.subn(r"const CACHE='[^']+'", "const CACHE='zlinktalk-web-amrwb-local-v5-20261016'", original,count=1)
+          if n!=1:raise SystemExit('Nao foi possivel atualizar a versao do cache')
+          required=["'./codec/amrwb-encoder.js'", "'./codec/amrwb-encoder.wasm'", "'./codec/decode-amr.js'", "'./codec/src/amr.wasm.js'"]
+          for item in required:
+              if item not in updated:
+                  updated=updated.replace("const SHELL=[", "const SHELL=["+item+",",1)
+          if updated==original:
+              raise SystemExit('Nenhuma alteracao no service worker: revise')
+          p.write_text(updated,encoding='utf-8')
+          PY
+          node --check sw.js
+          sha256sum codec/amrwb-encoder.js codec/amrwb-encoder.wasm codec/decode-amr.js codec/src/amr.wasm.js
+
+      - name: Guardar pacote do codec como artefato do GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: zlinktalk-amrwb-codec-compilado
+          path: |
+            codec/
+            sw.js
+          retention-days: 30
+
+      - name: Publicar codec testado no repositorio PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'zlinktalk-codec-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add codec/ sw.js
+          if git diff --cached --quiet; then
+            echo 'Codec compilado sem mudancas no repositorio.'
+          else
+            git commit -m 'Adicionar codificador e decodificador AMR-WB locais testados'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
