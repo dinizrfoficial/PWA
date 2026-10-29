@@ -818,8 +818,106 @@ async function openChannel(c){if(c.removed||c.blocked||c.enabled===false){toast(
  if(String(audio.rxChannelId||'')!==String(c.id))audio.stopRx();
  updateTxUI();sendWS({type:'select_channel',channelId:c.id});sendWS({type:'sync_rx'});}
 function updatePTT(){const c=state.selected;if(!c)return;$('ptt-title').textContent=c.name;$('ptt-channel-name').textContent=c.name;$('ptt-channel-avatar').innerHTML=avatarMarkup(c.avatar,c.name);$('ptt-type').textContent=c.type==='private'?'PRIVADO':'PÚBLICO';renderChannelPresence();updateCrossChannelBanner();}
-function renderUsers(){const list=$('users-list');list.replaceChildren();const users=state.users||[];renderChannelPresence();if(!users.length){list.innerHTML='<p class="empty">Nenhum usuário informado pelo servidor.</p>';return;}for(const u of users){const row=document.createElement('div');row.className='channel-card';row.innerHTML=`<span class="avatar-circle">${avatarMarkup(u.avatar,u.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(u.name||'Usuário')}</span><span class="channel-id">${u.isOwner?'Administrador':u.isModerator?'Moderador':'Usuário'} ${u.isInChannel?'• Neste canal':''}</span></span>`;list.append(row);}}
-function channelMenu(channel){const c=state.channels.find(c=>c.id===channel.id)||channel;const owner=c.ownerUid===state.profile?.uid;const actions=[
+// Gerenciamento de canal: a interface apenas oferece as ações permitidas.
+// O servidor é sempre responsável pela validação/autorização definitiva.
+function channelManagementPermissions(channel=state.selected){
+ const uid=String(state.user?.uid||'');
+ if(!uid||!channel)return {owner:false,moderator:false,canManage:false};
+ const owner=String(channel.ownerUid||'')===uid;
+ const moderatorUids=Array.isArray(channel.moderatorUids)?channel.moderatorUids:
+  (Array.isArray(channel.adminUids)?channel.adminUids:[]);
+ const moderator=!owner&&moderatorUids.some(id=>String(id)===uid);
+ return {owner,moderator,canManage:owner||moderator};
+}
+function userUid(user){return String(user?.id||user?.uid||'').trim();}
+function canManageListedUser(user){
+ const permission=channelManagementPermissions();
+ return permission.canManage&&String(state.usersChannelId||'')===String(state.selected?.id||'')&&
+  !!userUid(user)&&userUid(user)!==String(state.user?.uid||'')&&!user.isOwner&&
+  (!user.isModerator||permission.owner);
+}
+function renderUsers(){
+ const list=$('users-list');list.replaceChildren();renderChannelPresence();
+ if(!state.selected||String(state.usersChannelId||'')!==String(state.selected.id)){
+  list.innerHTML='<p class="empty">Consultando os participantes deste canal…</p>';return;
+ }
+ const users=Array.isArray(state.users)?state.users:[];
+ if(!users.length){list.innerHTML='<p class="empty">Nenhum usuário conectado neste canal.</p>';return;}
+ for(const u of users){
+  const row=document.createElement('div');row.className='channel-card zt-user-row';
+  const role=u.isOwner?'Administrador':u.isModerator?'Moderador':'Usuário';
+  const trusted=(u.isOwner||u.isModerator||u.isTrusted===true);
+  row.innerHTML=`<span class="avatar-circle">${avatarMarkup(u.avatar,u.name)}</span><span class="channel-info"><span class="channel-name">${escapeHTML(u.name||'Usuário')}</span><span class="channel-id">${role} • ${trusted?'Confiável':'Não confiável'}${u.isInChannel?' • Neste canal':''}</span></span>`;
+  if(canManageListedUser(u)){
+   const button=document.createElement('button');button.type='button';button.className='channel-menu';
+   button.textContent='⋮';button.setAttribute('aria-label',`Gerenciar ${u.name||'usuário'}`);
+   button.title='Gerenciar participante';button.onclick=()=>userManagementMenu(u);
+   row.append(button);
+  }
+  list.append(row);
+ }
+}
+function userManagementMenu(user){
+ if(!canManageListedUser(user))return;
+ const permission=channelManagementPermissions();
+ const trusted=user.isOwner||user.isModerator||user.isTrusted===true;
+ const actions=[];
+ if(!user.isModerator){
+  actions.push({label:trusted?'Remover confiança':'Tornar confiável',
+   fn:()=>changeUserTrust(user,!trusted)});
+ }
+ if(permission.owner){
+  if(user.isModerator){actions.push({label:'Remover função de moderador',danger:true,
+   fn:()=>changeUserModerator(user,false)});}
+  else if(trusted){actions.push({label:'Promover a moderador',
+   fn:()=>changeUserModerator(user,true)});}
+ }
+ if(actions.length)menu(`Gerenciar: ${user.name||'Usuário'}`,actions);
+}
+async function changeUserTrust(user,trusted){
+ if(!canManageListedUser(user)||user.isModerator)return;
+ const channelId=String(state.selected?.id||'');const targetUid=userUid(user);
+ if(!trusted){
+  const ok=await confirmModal('Remover confiança',
+   `Remover a confiança de ${user.name||'este usuário'} neste canal? Isso poderá interromper a transmissão atual.`,
+   'REMOVER CONFIANÇA');
+  if(!ok||!canManageListedUser(user)||String(state.selected?.id||'')!==channelId)return;
+ }
+ await perform(async()=>{
+  await api('/api/channels/set-trusted',{method:'POST',body:{channelId,userId:targetUid,trusted}});
+  if(String(state.selected?.id||'')===channelId){
+   for(const current of state.users||[])if(userUid(current)===targetUid)current.isTrusted=trusted;
+   renderUsers();
+  }
+  toast(trusted?'Usuário marcado como confiável.':'Confiança removida.');
+ });
+}
+async function changeUserModerator(user,promote){
+ const permission=channelManagementPermissions();
+ if(!permission.owner||!canManageListedUser(user))return;
+ const channelId=String(state.selected?.id||'');const targetUid=userUid(user);
+ if(promote&&!(user.isTrusted===true||user.isModerator||user.isOwner)){
+  toast('Primeiro torne este usuário confiável.');return;
+ }
+ const confirmed=await confirmModal(promote?'Promover a moderador':'Remover moderação',
+  promote?`Deseja promover ${user.name||'este usuário'} a moderador deste canal?`:
+   `Deseja remover a função de moderador de ${user.name||'este usuário'}? Ele continuará confiável.`,
+  promote?'PROMOVER':'REMOVER MODERAÇÃO');
+ if(!confirmed||!channelManagementPermissions().owner||String(state.selected?.id||'')!==channelId)return;
+ await perform(async()=>{
+  await api(promote?'/api/channels/make-moderator':'/api/channels/remove-moderator',
+   {method:'POST',body:{channelId,userId:targetUid}});
+  await loadChannels();
+  if(String(state.selected?.id||'')===channelId){
+   for(const current of state.users||[])if(userUid(current)===targetUid){
+    current.isModerator=promote;current.isTrusted=true;
+   }
+   renderUsers();
+  }
+  toast(promote?'Usuário promovido a moderador.':'Função de moderador removida.');
+ });
+}
+function channelMenu(channel){const c=state.channels.find(c=>c.id===channel.id)||channel;const owner=channelManagementPermissions(c).owner;const actions=[
  {label:'Entrar no canal',fn:()=>openChannel(c)},
  {label:'Informações do canal',fn:()=>infoChannel(c)},
  {label:isDefaultChannel(c)?'Remover canal padrão':'Definir canal padrão',fn:()=>perform(async()=>{await api('/api/channels/set-default',{method:'POST',body:{channelId:isDefaultChannel(c)?'':c.id}});await loadChannels();toast('Canal padrão atualizado');})},

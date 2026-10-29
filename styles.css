@@ -364,3 +364,9 @@ html:not(.zt-pwa-startup),html:not(.zt-pwa-startup) body{height:100%;overflow:hi
 
 /* v5.11: indicador de canal padrão junto ao nome */
 .channel-name{display:inline-flex;align-items:center;flex-wrap:wrap;column-gap:7px;row-gap:3px}.zt-default-pin{display:inline-flex;align-items:center;justify-content:center;color:#72cdff;filter:drop-shadow(0 1px 3px rgba(44,169,255,.35));flex:none}.zt-default-pin svg{width:20px;height:20px}
+
+/* PWA: ações de administração/moderação na lista de participantes. */
+.zt-user-row{align-items:center}
+.zt-user-row .channel-info{flex:1;min-width:0}
+.zt-user-row .channel-menu{flex:0 0 44px;margin-left:auto}
+.zt-user-row .channel-id{line-height:1.45}
